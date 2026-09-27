@@ -75,6 +75,18 @@ enum SessionStore {
         return try? AnnotationStore.load(from: url)
     }
 
+    // MARK: - Feedback artifacts
+
+    static let feedbackCardFilename = "feedback-card.png"
+
+    static func feedbackCardURL(for id: UUID) -> URL {
+        directory(for: id).appendingPathComponent(feedbackCardFilename)
+    }
+
+    static func thumbnailURL(for id: UUID, rep: Int) -> URL {
+        directory(for: id).appendingPathComponent("rep-\(rep)-thumb.png")
+    }
+
     // MARK: - Report interchange
 
     static func reportURL(for id: UUID) -> URL {

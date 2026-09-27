@@ -121,6 +121,35 @@ error (including an unsupported `--exercise`).
    works with no CLI changes, because the argparse choices come from
    `ANALYZERS`.
 
+## iOS app
+
+The native app lives in `FormBuddy/` and ships the same analyzer on device. Its
+MediaPipe dependency comes from CocoaPods, so **always open the workspace, not
+the project**:
+
+```bash
+xcodegen generate     # regenerate FormBuddy.xcodeproj (runs pod install)
+open FormBuddy.xcworkspace
+```
+
+> Opening `FormBuddy.xcodeproj` directly fails with
+> `Unable to resolve module dependency: 'MediaPipeTasksVision'` — the CocoaPods
+> products only exist in `FormBuddy.xcworkspace`.
+
+Build and test from the command line:
+
+```bash
+make ios-build        # or: make ios-test
+```
+
+`xcodegen generate` runs `pod install` automatically (`postGenCommand` in
+`project.yml`), so the workspace stays integrated after regenerating.
+
+The app turns the report into a feedback experience: an annotated video that
+highlights faults on the body, a per-rep strip (tap a rep to loop it) with a
+plain-language note per fault, and a shareable "coach's card" still that shows
+every rep's faults at a glance.
+
 ## Development
 
 ```bash

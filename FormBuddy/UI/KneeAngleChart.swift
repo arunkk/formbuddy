@@ -5,6 +5,8 @@ import Charts
 struct KneeAngleChart: View {
     let frames: [FrameAnnotation]
     var fps: Double = 30
+    var segments: [RepSegment] = []
+    var reps: [RepResult] = []
 
     private struct Point: Identifiable {
         let id: Int
@@ -37,8 +39,20 @@ struct KneeAngleChart: View {
         return boundaries
     }
 
+    private var repDepth: [Int: String] {
+        Dictionary(uniqueKeysWithValues: reps.map { ($0.repNumber, $0.depth) })
+    }
+
     var body: some View {
         Chart {
+            ForEach(segments) { segment in
+                RectangleMark(
+                    xStart: .value("Rep start", segment.startTime(fps: fps > 0 ? fps : 30)),
+                    xEnd: .value("Rep end", segment.endTime(fps: fps > 0 ? fps : 30))
+                )
+                .foregroundStyle(Color.depth(repDepth[segment.repNumber] ?? "").opacity(0.12))
+            }
+
             RuleMark(y: .value("Parallel", SquatAnalyzer.depthParallel))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 .foregroundStyle(.secondary)

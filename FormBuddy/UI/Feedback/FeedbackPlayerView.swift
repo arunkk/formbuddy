@@ -1,40 +1,32 @@
 import SwiftUI
 import AVFoundation
-import UIKit
 
-/// BlazePose body connections (33-landmark topology) used to draw the skeleton.
-enum PoseSkeleton {
-    static let connections: [(Int, Int)] = [
-        // Torso
-        (11, 12), (11, 23), (12, 24), (23, 24),
-        // Arms
-        (11, 13), (13, 15), (12, 14), (14, 16),
-        // Hands
-        (15, 17), (15, 19), (15, 21), (17, 19), (16, 18), (16, 20), (16, 22), (18, 20),
-        // Legs
-        (23, 25), (25, 27), (27, 29), (27, 31), (29, 31),
-        (24, 26), (26, 28), (28, 30), (28, 32), (30, 32),
-    ]
-}
-
-/// Annotated playback: the original clip with a landmark skeleton, live phase /
-/// rep / knee-angle HUD, fault badges, and a scrubber — all drawn at playback
-/// time from the stored sidecar (no re-encoded video).
-struct AnnotatedPlaybackView: View {
+/// The feedback player: the original clip with the pose skeleton and
+/// body-anchored fault highlights, optionally scoped to a single rep. Scoped
+/// playback loops the rep (unless Reduce Motion is on) so the user can study it.
+struct FeedbackPlayerView: View {
     let videoURL: URL
     let sidecar: AnnotationSidecar
+    let segment: RepSegment?
+    var rep: RepResult? = nil
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var player = AVPlayer()
     @State private var currentFrame = 0
     @State private var position: Double = 0
     @State private var duration: Double = 0
-    @State private var isScrubbing = false
     @State private var isPlaying = false
-    @State private var showSkeleton = true
+    @State private var isScrubbing = false
+    @State private var showHighlights = true
     @State private var videoAspect: CGFloat = 9.0 / 16.0
     @State private var mapper: OrientationMapper?
     @State private var timeObserver: Any?
     @State private var endObserver: NSObjectProtocol?
+
+    @State private var isScoped = false
+    @State private var rangeStart: Double = 0
+    @State private var rangeEnd: Double = 0
 
     private var frames: [AnnotationFrame] { sidecar.frames }
     private var safeFPS: Double { sidecar.fps > 0 ? sidecar.fps : 30 }
@@ -44,17 +36,30 @@ struct AnnotatedPlaybackView: View {
         return frames[currentFrame]
     }
 
+    private var activeFaults: [String] {
+        guard let annotation = currentAnnotation else { return rep?.faults ?? [] }
+        var faults = Set(annotation.faults)
+        if let rep { faults.formUnion(rep.faults) }
+        return faults.sorted()
+    }
+
+    private var sliderRange: ClosedRange<Double> {
+        if isScoped {
+            let upper = max(rangeEnd, rangeStart + 0.01)
+            return rangeStart...upper
+        }
+        return 0...max(duration, 0.01)
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             videoSurface
             controls
-            if !repStartFrames.isEmpty {
-                repPicker
-            }
         }
         .onAppear(perform: configurePlayer)
         .onDisappear(perform: teardownPlayer)
         .task { await loadVideoGeometry() }
+        .onChange(of: segment) { _, _ in applySegment(autoplay: true) }
     }
 
     // MARK: - Video surface
@@ -64,8 +69,8 @@ struct AnnotatedPlaybackView: View {
             Color.black
             PlayerLayerRepresentable(player: player)
 
-            if showSkeleton, let mapper {
-                skeleton(mapper: mapper)
+            if let annotation = currentAnnotation, let mapper {
+                FormHighlightsOverlay(frame: annotation, rep: rep, mapper: mapper, showHighlights: showHighlights)
             }
 
             hud
@@ -75,40 +80,17 @@ struct AnnotatedPlaybackView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(alignment: .topTrailing) {
             Button {
-                showSkeleton.toggle()
+                showHighlights.toggle()
             } label: {
-                Image(systemName: showSkeleton ? "figure.walk.motion" : "figure.walk")
+                Image(systemName: showHighlights ? "figure.walk.motion" : "figure.walk")
                     .font(.body.weight(.semibold))
                     .padding(8)
                     .background(.ultraThinMaterial, in: Circle())
             }
-            .padding(10)
-            .accessibilityLabel(showSkeleton ? "Hide skeleton overlay" : "Show skeleton overlay")
+            .frame(minWidth: 44, minHeight: 44)
+            .padding(6)
+            .accessibilityLabel(showHighlights ? "Hide form highlights" : "Show form highlights")
         }
-    }
-
-    private func skeleton(mapper: OrientationMapper) -> some View {
-        Canvas { context, size in
-            guard let landmarks = currentAnnotation?.landmarks, landmarks.count == 99 else { return }
-
-            var path = Path()
-            for (a, b) in PoseSkeleton.connections {
-                guard landmarks[a * 3 + 2] >= 0.5, landmarks[b * 3 + 2] >= 0.5 else { continue }
-                let start = mapper.mapLandmark(x: landmarks[a * 3], y: landmarks[a * 3 + 1], viewSize: size)
-                let end = mapper.mapLandmark(x: landmarks[b * 3], y: landmarks[b * 3 + 1], viewSize: size)
-                path.move(to: start)
-                path.addLine(to: end)
-            }
-            context.stroke(path, with: .color(.green), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-
-            for index in 0..<33 where landmarks[index * 3 + 2] >= 0.5 {
-                let point = mapper.mapLandmark(x: landmarks[index * 3], y: landmarks[index * 3 + 1], viewSize: size)
-                let dot = Path(ellipseIn: CGRect(x: point.x - 3.5, y: point.y - 3.5, width: 7, height: 7))
-                context.fill(dot, with: .color(.white))
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -117,7 +99,7 @@ struct AnnotatedPlaybackView: View {
             VStack {
                 HStack {
                     HStack(spacing: 8) {
-                        Text("Rep \(annotation.repCount)")
+                        Text(isScoped ? "Rep \(rep?.repNumber ?? annotation.repCount)" : "Full set")
                             .font(.caption.weight(.bold))
                         Text(FormCopy.phase(annotation.phase))
                             .font(.caption)
@@ -132,12 +114,16 @@ struct AnnotatedPlaybackView: View {
                     Spacer()
                 }
                 Spacer()
-                if !annotation.faults.isEmpty {
+                if showHighlights {
                     HStack {
-                        ForEach(annotation.faults, id: \.self) { fault in
-                            Chip(text: FormCopy.fault(fault), tint: .red, systemImage: "exclamationmark.triangle.fill")
+                        if activeFaults.isEmpty {
+                            Chip(text: "Form looks good", tint: .green, systemImage: "checkmark.circle.fill")
+                        } else {
+                            ForEach(activeFaults, id: \.self) { fault in
+                                Chip(text: FormCopy.fault(fault), tint: .red, systemImage: "exclamationmark.triangle.fill")
+                            }
                         }
-                        Spacer()
+                        Spacer(minLength: 0)
                     }
                 }
             }
@@ -150,7 +136,7 @@ struct AnnotatedPlaybackView: View {
 
     private var controls: some View {
         VStack(spacing: 8) {
-            Slider(value: $position, in: 0...max(duration, 0.01)) { editing in
+            Slider(value: $position, in: sliderRange) { editing in
                 isScrubbing = editing
                 if !editing { seek(to: position) }
             }
@@ -175,47 +161,17 @@ struct AnnotatedPlaybackView: View {
 
                 Spacer()
 
-                Text("fps \(Int(safeFPS.rounded()))")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    private var repPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(repStartFrames, id: \.rep) { item in
-                    Button("Rep \(item.rep)") {
-                        seek(to: Double(item.frame) / safeFPS)
-                    }
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+                if isScoped {
+                    Label(reduceMotion ? "Rep view" : "Looping rep", systemImage: "repeat")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
-            .padding(.horizontal, 2)
         }
     }
 
     private var timeLabel: String {
         String(format: "%0.1f / %0.1f s", min(position, duration), duration)
-    }
-
-    private struct RepStart: Hashable {
-        let rep: Int
-        let frame: Int
-    }
-
-    private var repStartFrames: [RepStart] {
-        var starts: [RepStart] = []
-        var previous = 0
-        for (index, frame) in frames.enumerated() where frame.repCount > previous {
-            previous = frame.repCount
-            starts.append(RepStart(rep: frame.repCount, frame: index))
-        }
-        return starts
     }
 
     // MARK: - Player lifecycle
@@ -233,8 +189,8 @@ struct AnnotatedPlaybackView: View {
             isPlaying = player.rate != 0
             guard !isScrubbing else { return }
             position = seconds
-            let frame = Int(seconds * safeFPS)
-            currentFrame = min(max(frame, 0), max(frames.count - 1, 0))
+            currentFrame = min(max(Int(seconds * safeFPS), 0), max(frames.count - 1, 0))
+            handleScope(seconds)
         }
 
         endObserver = NotificationCenter.default.addObserver(
@@ -243,9 +199,10 @@ struct AnnotatedPlaybackView: View {
             queue: .main
         ) { _ in
             isPlaying = false
-            position = 0
-            currentFrame = 0
-            player.seek(to: .zero)
+            let restart = isScoped ? rangeStart : 0
+            position = restart
+            currentFrame = isScoped ? (segment?.startFrame ?? 0) : 0
+            player.seek(to: CMTime(seconds: restart, preferredTimescale: 600))
         }
     }
 
@@ -259,6 +216,37 @@ struct AnnotatedPlaybackView: View {
             self.endObserver = nil
         }
         player.pause()
+    }
+
+    private func handleScope(_ seconds: Double) {
+        guard isScoped, rangeEnd > rangeStart else { return }
+        guard seconds >= rangeEnd - (1.0 / safeFPS) else { return }
+        if reduceMotion {
+            player.pause()
+            isPlaying = false
+        } else {
+            player.seek(to: CMTime(seconds: rangeStart, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero)
+            position = rangeStart
+            currentFrame = segment?.startFrame ?? 0
+        }
+    }
+
+    private func applySegment(autoplay: Bool) {
+        let start = segment.map { $0.startTime(fps: safeFPS) } ?? 0
+        let end = segment.map { $0.endTime(fps: safeFPS) } ?? max(duration, 0)
+        isScoped = segment != nil
+        rangeStart = start
+        rangeEnd = max(end, start)
+        seek(to: start)
+
+        if autoplay, segment != nil, !reduceMotion {
+            player.play()
+            isPlaying = true
+        } else {
+            player.pause()
+            isPlaying = false
+        }
     }
 
     private func loadVideoGeometry() async {
@@ -277,10 +265,9 @@ struct AnnotatedPlaybackView: View {
 
     private func togglePlayback() {
         if player.rate == 0 {
-            if duration > 0, position >= duration - 0.1 {
-                player.seek(to: .zero)
-                position = 0
-                currentFrame = 0
+            let end = isScoped ? rangeEnd : duration
+            if end > 0, position >= end - 0.1 {
+                seek(to: isScoped ? rangeStart : 0)
             }
             player.play()
             isPlaying = true
@@ -291,34 +278,11 @@ struct AnnotatedPlaybackView: View {
     }
 
     private func seek(to seconds: Double) {
-        let clamped = min(max(seconds, 0), max(duration, 0))
+        let lower = isScoped ? rangeStart : 0
+        let upper = isScoped ? rangeEnd : max(duration, 0)
+        let clamped = min(max(seconds, lower), max(upper, lower))
         player.seek(to: CMTime(seconds: clamped, preferredTimescale: 600),
                     toleranceBefore: .zero, toleranceAfter: .zero)
         currentFrame = min(max(Int(clamped * safeFPS), 0), max(frames.count - 1, 0))
-    }
-}
-
-/// A UIView backed by `AVPlayerLayer` so the skeleton overlay can be sized to
-/// the exact displayed video rect.
-private final class PlayerLayerView: UIView {
-    override class var layerClass: AnyClass { AVPlayerLayer.self }
-    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
-}
-
-private struct PlayerLayerRepresentable: UIViewRepresentable {
-    let player: AVPlayer
-
-    func makeUIView(context: Context) -> PlayerLayerView {
-        let view = PlayerLayerView()
-        view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspect
-        view.backgroundColor = .black
-        return view
-    }
-
-    func updateUIView(_ view: PlayerLayerView, context: Context) {
-        if view.playerLayer.player !== player {
-            view.playerLayer.player = player
-        }
     }
 }
