@@ -50,6 +50,8 @@ class TestOSError:
             output_dir="./out",
             write_video=True,
             estimator=None,
+            segment_person=True,
+            segmenter=None,
         ):
             raise PermissionError("cannot create output dir")
 
@@ -72,12 +74,15 @@ class TestSuccess:
             output_dir="./out",
             write_video=True,
             estimator=None,
+            segment_person=True,
+            segmenter=None,
         ):
             calls.update(
                 input_path=input_path,
                 exercise=exercise,
                 output_dir=output_dir,
                 write_video=write_video,
+                segment_person=segment_person,
             )
             return SimpleNamespace(
                 summary=SimpleNamespace(total_reps=3, reps_below_parallel=1)
@@ -123,3 +128,27 @@ class TestSuccess:
 
         assert rc == 0
         assert calls["exercise"] == "squat"
+
+    def test_segmentation_on_by_default(self, tmp_path, monkeypatch):
+        calls = {}
+        self._stub_run(monkeypatch, calls)
+        video = tmp_path / "squat.mp4"
+        video.write_bytes(b"")
+
+        rc = main(["--input", str(video)])
+
+        assert rc == 0
+        assert calls["segment_person"] is True
+
+    def test_no_segmentation_flag_disables_segment_person(
+        self, tmp_path, monkeypatch
+    ):
+        calls = {}
+        self._stub_run(monkeypatch, calls)
+        video = tmp_path / "squat.mp4"
+        video.write_bytes(b"")
+
+        rc = main(["--input", str(video), "--no-segmentation"])
+
+        assert rc == 0
+        assert calls["segment_person"] is False

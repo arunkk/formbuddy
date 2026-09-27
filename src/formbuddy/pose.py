@@ -16,8 +16,10 @@ import numpy as np
 _MODEL_PATH = Path(__file__).parent / "assets" / "pose_landmarker_lite.task"
 
 # Milliseconds between synthetic video frames (~30 fps); timestamps passed to
-# detect_for_video must be strictly increasing.
-_FRAME_INTERVAL_MS = 33
+# detect_for_video must be strictly increasing.  Other video-mode models in
+# the pipeline (see formbuddy.segment) share this cadence so both see the
+# same synthetic timeline.
+FRAME_INTERVAL_MS = 33
 
 
 class PoseEstimator:
@@ -63,7 +65,7 @@ class PoseEstimator:
         rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         self._frame_index += 1
-        timestamp_ms = self._frame_index * _FRAME_INTERVAL_MS
+        timestamp_ms = self._frame_index * FRAME_INTERVAL_MS
         result = self._landmarker.detect_for_video(image, timestamp_ms)
 
         if not result.pose_landmarks:

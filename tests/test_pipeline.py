@@ -11,6 +11,7 @@ import pytest
 from formbuddy.analyzers.squat import SquatReport
 from formbuddy.geometry import SIDE_LANDMARKS
 from formbuddy.pipeline import ANALYZERS, run
+from formbuddy.segment import PersonMask
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +141,68 @@ def _write_noise_video(path, n_frames: int = 30, fps: float = 30.0) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Segmentation gate helpers
+# ---------------------------------------------------------------------------
+
+class FakeSegmenter:
+    """PersonSegmenter stand-in returning a fixed mask (or None) per frame."""
+
+    def __init__(self, mask: np.ndarray | None) -> None:
+        self.mask = mask
+        self.calls = 0
+        self.timestamps: list[int] = []
+        self.closed = False
+
+    def process(self, bgr_frame, timestamp_ms):
+        self.calls += 1
+        self.timestamps.append(timestamp_ms)
+        if self.mask is None:
+            return None
+        return PersonMask(mask=self.mask, coverage=float(self.mask.mean()))
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class RecordingEstimator:
+    """PoseEstimator stand-in returning fixed landmarks and keeping inputs."""
+
+    def __init__(self, landmarks: np.ndarray | None) -> None:
+        self.landmarks = landmarks
+        self.seen: list[np.ndarray] = []
+
+    def process(self, bgr_frame):
+        self.seen.append(bgr_frame)
+        return self.landmarks
+
+    def close(self) -> None:
+        pass
+
+
+def _constant_landmarks(x: float) -> np.ndarray:
+    """(33, 3) landmarks in a standing side-view pose around column *x*.
+
+    Joints are placed apart so the analyzer's angles are well defined.
+    """
+    lm = np.zeros((33, 3), dtype=np.float32)
+    lm[:, 0] = x
+    lm[:, 1] = 0.5
+    lm[:, 2] = 1.0
+    for index, y in ((11, 0.30), (12, 0.30), (23, 0.50), (24, 0.50),
+                     (25, 0.70), (26, 0.70), (27, 0.90), (28, 0.90)):
+        lm[index, 0] = x
+        lm[index, 1] = y
+    lm[25, 0] = lm[26, 0] = x + 0.02
+    return lm
+
+
+def _left_half_mask() -> np.ndarray:
+    mask = np.zeros((48, 64), dtype=np.uint8)
+    mask[:, :32] = 1
+    return mask
+
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
@@ -153,7 +216,10 @@ class TestRunEndToEnd:
         _write_noise_video(video_path)
 
         report = run(
-            str(video_path), estimator=FakeEstimator(), output_dir=str(tmp_path)
+            str(video_path),
+            estimator=FakeEstimator(),
+            output_dir=str(tmp_path),
+            segment_person=False,
         )
 
         assert isinstance(report, SquatReport)
@@ -167,7 +233,10 @@ class TestRunEndToEnd:
         _write_noise_video(video_path, n_frames=30, fps=30.0)
 
         report = run(
-            str(video_path), estimator=FakeEstimator(), output_dir=str(tmp_path)
+            str(video_path),
+            estimator=FakeEstimator(),
+            output_dir=str(tmp_path),
+            segment_person=False,
         )
 
         assert report.video_meta["fps"] == 30.0
@@ -184,6 +253,7 @@ class TestRunEndToEnd:
             estimator=FakeEstimator(),
             output_dir=str(tmp_path),
             write_video=False,
+            segment_person=False,
         )
 
         assert (tmp_path / "report.json").exists()
@@ -200,6 +270,7 @@ class TestRunEndToEnd:
                 exercise="deadlift",
                 estimator=FakeEstimator(),
                 output_dir=str(tmp_path),
+                segment_person=False,
             )
 
 
@@ -211,7 +282,12 @@ class TestRunMissingVideo:
         missing = tmp_path / "does_not_exist.mp4"
 
         with pytest.raises(FileNotFoundError, match=str(missing)):
-            run(str(missing), estimator=FakeEstimator(), output_dir=str(tmp_path))
+            run(
+                str(missing),
+                estimator=FakeEstimator(),
+                output_dir=str(tmp_path),
+                segment_person=False,
+            )
 
 
 class TestRunEmptyFrames:
@@ -223,7 +299,10 @@ class TestRunEmptyFrames:
         _write_noise_video(video_path)
 
         report = run(
-            str(video_path), estimator=EmptyEstimator(), output_dir=str(tmp_path)
+            str(video_path),
+            estimator=EmptyEstimator(),
+            output_dir=str(tmp_path),
+            segment_person=False,
         )
 
         assert report.summary.total_reps == 0
@@ -246,6 +325,7 @@ class TestRunEmptyFrameAccounting:
             str(video_path),
             estimator=FirstKEstimator(k=5),
             output_dir=str(tmp_path),
+            segment_person=False,
         )
 
         assert "no_person_in_most_frames" not in report.warnings
@@ -261,9 +341,143 @@ class TestRunEmptyFrameAccounting:
             str(video_path),
             estimator=GappyEstimator(empty_indices={0, 5, 10, 15, 20, 25, 29}),
             output_dir=str(tmp_path),
+            segment_person=False,
         )
 
         assert "no_person_in_most_frames" in report.warnings
+
+
+class TestPersonSegmentationGate:
+    """Pose is fed only person pixels and dropped when it lands outside."""
+
+    def test_background_is_suppressed_before_pose(self, tmp_path):
+        """With a person mask, the estimator sees fill outside the mask and
+        raw pixels inside it."""
+        video_path = tmp_path / "squat.mp4"
+        _write_noise_video(video_path, n_frames=4)
+        estimator = RecordingEstimator(_constant_landmarks(0.2))
+        segmenter = FakeSegmenter(_left_half_mask())
+
+        run(
+            str(video_path),
+            estimator=estimator,
+            segmenter=segmenter,
+            output_dir=str(tmp_path),
+            write_video=False,
+        )
+
+        assert segmenter.calls == 4
+        assert segmenter.timestamps == [33, 66, 99, 132]
+        seen = estimator.seen[0]
+        assert (seen[:, 32:] == 114).all()  # background suppressed
+        assert not (seen[:, :32] == 114).all()  # person pixels kept
+
+    def test_pose_outside_the_person_is_rejected(self, tmp_path):
+        """Landmarks outside the silhouette are dropped as environment
+        lock-on: every frame counts empty and is reported."""
+        video_path = tmp_path / "squat.mp4"
+        _write_noise_video(video_path, n_frames=10)
+        estimator = RecordingEstimator(_constant_landmarks(0.9))
+        segmenter = FakeSegmenter(_left_half_mask())
+
+        report = run(
+            str(video_path),
+            estimator=estimator,
+            segmenter=segmenter,
+            output_dir=str(tmp_path),
+            write_video=False,
+        )
+
+        assert report.video_meta["segmented_frames"] == 10
+        assert report.video_meta["pose_rejected_outside_person"] == 10
+        assert "no_person_in_most_frames" in report.warnings
+
+    def test_pose_inside_the_person_is_kept(self, tmp_path):
+        """Landmarks inside the silhouette pass the gate untouched."""
+        video_path = tmp_path / "squat.mp4"
+        _write_noise_video(video_path, n_frames=10)
+        estimator = RecordingEstimator(_constant_landmarks(0.2))
+        mask = np.ones((48, 64), dtype=np.uint8)
+        segmenter = FakeSegmenter(mask)
+
+        report = run(
+            str(video_path),
+            estimator=estimator,
+            segmenter=segmenter,
+            output_dir=str(tmp_path),
+            write_video=False,
+        )
+
+        assert report.video_meta["segmented_frames"] == 10
+        assert report.video_meta["pose_rejected_outside_person"] == 0
+        assert report.warnings == []
+
+    def test_no_person_mask_falls_back_to_raw_frames(self, tmp_path):
+        """When the segmenter finds nobody the raw frame reaches pose, and
+        nothing is counted as segmented."""
+        video_path = tmp_path / "squat.mp4"
+        _write_noise_video(video_path, n_frames=4)
+        estimator = RecordingEstimator(_constant_landmarks(0.9))
+        segmenter = FakeSegmenter(None)
+
+        report = run(
+            str(video_path),
+            estimator=estimator,
+            segmenter=segmenter,
+            output_dir=str(tmp_path),
+            write_video=False,
+        )
+
+        assert report.video_meta["segmented_frames"] == 0
+        assert report.video_meta["pose_rejected_outside_person"] == 0
+        assert report.warnings == []
+        assert not (estimator.seen[0] == 114).all()
+
+    def test_segment_person_false_skips_segmentation(self, tmp_path):
+        """segment_person=False leaves the segmentation counters out and
+        never touches the segmenter."""
+        video_path = tmp_path / "squat.mp4"
+        _write_noise_video(video_path, n_frames=4)
+        estimator = RecordingEstimator(_constant_landmarks(0.9))
+        segmenter = FakeSegmenter(_left_half_mask())
+
+        report = run(
+            str(video_path),
+            estimator=estimator,
+            segmenter=segmenter,
+            segment_person=False,
+            output_dir=str(tmp_path),
+            write_video=False,
+        )
+
+        assert segmenter.calls == 0
+        assert "segmented_frames" not in report.video_meta
+        assert not (estimator.seen[0] == 114).all()
+
+    def test_owned_segmenter_is_closed(self, tmp_path, monkeypatch):
+        """run() closes the segmenter it created itself."""
+        closed: list[bool] = []
+
+        class ClosingSegmenter(FakeSegmenter):
+            def close(self) -> None:
+                super().close()
+                closed.append(self.closed)
+
+        video_path = tmp_path / "squat.mp4"
+        _write_noise_video(video_path, n_frames=2)
+        monkeypatch.setattr(
+            "formbuddy.pipeline.PersonSegmenter",
+            lambda: ClosingSegmenter(None),
+        )
+
+        run(
+            str(video_path),
+            estimator=RecordingEstimator(None),
+            output_dir=str(tmp_path),
+            write_video=False,
+        )
+
+        assert closed == [True]
 
 
 class _FakeCapture:
@@ -310,6 +524,7 @@ class TestRunFpsZero:
             estimator=FakeEstimator(),
             output_dir=str(tmp_path / "out"),
             write_video=False,
+            segment_person=False,
         )
 
         assert report.video_meta["fps"] == 30.0
@@ -333,6 +548,7 @@ class TestRunCaptureRelease:
                 str(tmp_path / "fake.mp4"),
                 estimator=FakeEstimator(),
                 output_dir=str(tmp_path / "out"),
+                segment_person=False,
             )
 
         assert fake_cap.released
