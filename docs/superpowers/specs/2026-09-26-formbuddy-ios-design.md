@@ -563,14 +563,44 @@ not change.
 
 ## Environment prerequisites (this machine)
 
-Observed while writing this spec:
+Verified 2026-09-26, after fixing the active developer directory:
 
-- `/Applications/Xcode.app` is present, but `xcode-select -p` returns
-  `/Library/Developer/CommandLineTools`, so `xcodebuild` is unavailable. Fix:
-  `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, then
-  `sudo xcodebuild -license accept`.
-- CocoaPods is not installed (not needed if SPM is used).
-- macOS 27.0 — well above any Xcode floor.
+| Item | Value |
+| --- | --- |
+| `xcode-select -p` | `/Applications/Xcode.app/Contents/Developer` |
+| Xcode | 27.0 (build `27A266a`), license already accepted |
+| Swift | 6.4 (`swiftlang-6.4.0.34.1`), target `arm64-apple-macosx27.0.0` |
+| SDKs | `iphoneos27.0`, `iphonesimulator27.0` |
+| Simulator runtime | iOS 27.0 (`24A434`) — iPhone 18 Pro, 18 Pro Max, 17, 17e, iPhone Air, iPad Pro 13" (M5) |
+| Physical device | **none connected** |
+| macOS | 27.0 |
+| CocoaPods | not installed (not needed if SPM is used) |
+
+The original blocker: `xcode-select -p` pointed at
+`/Library/Developer/CommandLineTools`, so `xcodebuild` refused with *"tool
+'xcodebuild' requires Xcode, but active developer directory ... is a command line
+tools instance"*. Fixed with
+`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`; reversible via
+`sudo xcode-select -r`. A per-shell `DEVELOPER_DIR` override does the same without
+root, but do not persist it in a shell rc file — it pins the toolchain and fails
+confusingly after an Xcode upgrade.
+
+**Two consequences for the plan:**
+
+1. **M0 needs hardware that is not attached.** MediaPipe on iOS is CPU-only, and a
+   simulator runs that code on the Mac's Apple Silicon — far faster than any phone,
+   and with no camera. Simulator timings would be optimistic by an unknown factor
+   and therefore cannot answer the M0 go/no-go question. Benchmark a mid-tier
+   device rather than a current flagship, so the number represents the *slowest*
+   phone you intend to support. Until a device is available M0 is blocked, which
+   makes **M1 the unblocked path**: the `AnalysisCore` port needs no camera, no ML
+   runtime, and no device — it runs as a plain XCTest target.
+2. **Swift 6.4 means strict concurrency is likely the default** for a new Xcode 27
+   project. Expect `Sendable` diagnostics around the ObjC-based MediaPipe delegate
+   callbacks (`PoseLandmarkerLiveStreamDelegate`). Setting the target to Swift 5
+   language mode (`SWIFT_VERSION = 5`) is a legitimate way to reduce friction while
+   learning Swift, with migration later. `AnalysisCore` should be written
+   concurrency-clean regardless — it is pure value types with no excuse.
 
 ## Android follow-on
 
