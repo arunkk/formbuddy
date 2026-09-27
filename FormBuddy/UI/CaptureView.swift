@@ -1,127 +1,115 @@
 import SwiftUI
-import AVFoundation
+@preconcurrency import AVFoundation
 import PhotosUI
+import UIKit
 import OSLog
 
 struct CaptureView: View {
-    private static let logger = Logger(subsystem: "com.formbuddy.app", category: "video-import")
+    private static let logger = Logger(subsystem: "com.formbuddy.app", category: "capture")
+    private static let maxDuration: TimeInterval = 60
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
     @State private var recorder = CameraRecorder()
+    @State private var captureSession: AVCaptureSession?
+    @State private var previewLayer: AVCaptureVideoPreviewLayer?
+    @State private var status: CameraStatus = .checking
     @State private var isRecording = false
-    @State private var analysisURL: URL?
-    @State private var isImporting = false
     @State private var elapsed: TimeInterval = 0
     @State private var timer: Timer?
-    @State private var previewLayer: AVCaptureVideoPreviewLayer?
-    @State private var errorMessage: String?
-    @State private var showError = false
+    @State private var analysisURL: URL?
+    @State private var isImporting = false
     @State private var showPhotoPicker = false
     @State private var selectedPhoto: PhotosPickerItem?
+    @State private var errorMessage: String?
+    @State private var showError = false
+
+    enum CameraStatus: Equatable {
+        case checking
+        case ready
+        case unavailable
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                if let layer = previewLayer {
-                    CameraPreviewView(previewLayer: layer)
-                        .ignoresSafeArea()
+                previewBackground
+                if status == .ready {
+                    FramingGuide()
+                    controls
+                } else if status == .unavailable {
+                    unavailableState
                 } else {
-                    Color.black.ignoresSafeArea()
+                    ProgressView("Starting camera…")
+                        .tint(.white)
+                        .foregroundStyle(.white)
                 }
-                VStack {
-                    Spacer()
-                    if isRecording {
-                        Text(String(format: "%.1fs / 60s max", elapsed))
-                            .foregroundColor(.yellow)
-                            .padding()
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(8)
-                    }
-                }
+
                 if isImporting {
                     ProgressView("Importing video…")
                         .padding(20)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             }
-            .navigationTitle("Capture")
+            .navigationTitle("Record")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button("Record") {
-                            if isRecording { stopRecording() } else { startRecording() }
-                        }
-                        Button("Import from Photos") {
-                            showPhotoPicker = true
-                        }
-                        Button("Import Test Video from Photos") {
-                            useTestVideo()
-                        }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showPhotoPicker = true
                     } label: {
-                        Image(systemName: "plus")
+                        Label("Import from Photos", systemImage: "photo.on.rectangle")
                     }
                 }
             }
             .navigationDestination(item: $analysisURL) { url in
-                AnalyzingView(videoURL: url)
+                AnalyzingView(videoURL: url, onFinish: { dismiss() })
             }
-            .onAppear {
-                setupPreview()
-            }
-            .onDisappear {
-                recorder.stopRecording { _ in }
-            }
-            .alert("Error", isPresented: $showError) {
-                Button("OK") {}
+            .alert("Something went wrong", isPresented: $showError) {
+                Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "Unknown error")
             }
             .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhoto, matching: .videos)
             .onChange(of: selectedPhoto) { _, newItem in
-                guard let newItem = newItem else { return }
-                Task {
-                    isImporting = true
-                    Self.logger.info("Photos video selected; starting transferable import")
-                    do {
-                        guard let imported = try await newItem.loadTransferable(type: ImportedVideo.self) else {
-                            throw VideoImportError.sourceMissing
-                        }
-                        let attributes = try FileManager.default.attributesOfItem(atPath: imported.url.path)
-                        let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
-                        guard size > 0 else { throw VideoImportError.emptyFile }
-                        await MainActor.run {
-                            Self.logger.info("Video imported successfully (\(size) bytes); navigating to analysis")
-                            isImporting = false
-                            analysisURL = imported.url
-                            selectedPhoto = nil
-                        }
-                    } catch {
-                        await MainActor.run {
-                            Self.logger.error("Photos video import failed: \(error.localizedDescription, privacy: .public)")
-                            isImporting = false
-                            selectedPhoto = nil
-                            errorMessage = "Failed to import video: \(error.localizedDescription)"
-                            showError = true
-                        }
-                    }
-                }
+                handlePhotoSelection(newItem)
             }
+            .task { await prepareCamera() }
+            .onDisappear(perform: stopEverything)
+            .interactiveDismissDisabled(isRecording || isImporting)
         }
     }
 
-    private func useTestVideo() {
-        // The test clip lives in Photos on the simulator/device; host Mac paths
-        // are not accessible from the app sandbox.
-        showPhotoPicker = true
+    // MARK: - Camera
+
+    @ViewBuilder
+    private var previewBackground: some View {
+        if let layer = previewLayer {
+            CameraPreviewView(previewLayer: layer)
+                .ignoresSafeArea()
+        } else {
+            Color.black.ignoresSafeArea()
+        }
     }
 
-    private func setupPreview() {
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-            errorMessage = "No camera available. Use 'Import from Photos' or 'Use Test Video'."
-            showError = true
+    private func prepareCamera() async {
+        // Returning from analysis: reuse the configured session and restart it.
+        if previewLayer != nil {
+            let session = captureSession
+            DispatchQueue.global(qos: .userInitiated).async { session?.startRunning() }
             return
         }
-        guard let input = try? AVCaptureDeviceInput(device: device) else {
-            errorMessage = "Cannot access camera."
-            showError = true
+        guard await requestCameraAccess() else {
+            status = .unavailable
+            return
+        }
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+              let input = try? AVCaptureDeviceInput(device: device) else {
+            status = .unavailable
             return
         }
         let session = AVCaptureSession()
@@ -129,26 +117,106 @@ struct CaptureView: View {
         if session.canAddInput(input) { session.addInput(input) }
         let layer = AVCaptureVideoPreviewLayer(session: session)
         layer.videoGravity = .resizeAspectFill
+
+        captureSession = session
         previewLayer = layer
+        status = .ready
+
+        let sessionRef = session
         DispatchQueue.global(qos: .userInitiated).async {
-            session.startRunning()
+            sessionRef.startRunning()
         }
     }
 
-    private func startRecording() {
-        guard previewLayer != nil else {
-            errorMessage = "Camera not available. Run on a physical device."
-            showError = true
-            return
+    private func requestCameraAccess() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .video)
+        default:
+            return false
         }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("recording.mov")
+    }
+
+    private var controls: some View {
+        VStack {
+            Spacer()
+            VStack(spacing: 14) {
+                Text(isRecording ? String(format: "%.1fs · up to 60s", elapsed) : "Side view · whole body in frame")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(.black.opacity(0.35), in: Capsule())
+                    .contentTransition(.numericText())
+
+                RecordButton(isRecording: isRecording, progress: min(elapsed / Self.maxDuration, 1)) {
+                    isRecording ? stopRecording() : startRecording()
+                }
+                .sensoryFeedback(.impact(weight: .medium), trigger: isRecording)
+
+                Text("Record a set, or import a clip you've already filmed")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.bottom, 28)
+            .frame(maxWidth: .infinity)
+            .background(
+                LinearGradient(
+                    colors: [.black.opacity(0), .black.opacity(0.65)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .bottom)
+            )
+        }
+    }
+
+    private var unavailableState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "camera.badge.ellipsis")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("Camera unavailable")
+                .font(.title3.weight(.semibold))
+            Text("This device has no usable camera, or access is turned off. You can still import a clip from Photos.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button {
+                showPhotoPicker = true
+            } label: {
+                Label("Import from Photos", systemImage: "photo.on.rectangle")
+            }
+            .buttonStyle(.borderedProminent)
+
+            if AVCaptureDevice.authorizationStatus(for: .video) == .denied {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                }
+            }
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+
+    // MARK: - Recording
+
+    private func startRecording() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("recording-\(UUID().uuidString).mov")
         do {
             try recorder.startRecording(to: url)
             isRecording = true
             elapsed = 0
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
                 elapsed += 0.1
-                if elapsed >= 60 { stopRecording() }
+                if elapsed >= Self.maxDuration { stopRecording() }
             }
         } catch {
             errorMessage = "Failed to start recording: \(error.localizedDescription)"
@@ -158,15 +226,114 @@ struct CaptureView: View {
 
     private func stopRecording() {
         timer?.invalidate()
+        timer = nil
         isRecording = false
         recorder.stopRecording { url in
-            if let url = url {
+            if let url {
                 analysisURL = url
             } else {
                 errorMessage = "Recording failed or was cancelled."
                 showError = true
             }
         }
+    }
+
+    private func stopEverything() {
+        timer?.invalidate()
+        timer = nil
+        if isRecording {
+            isRecording = false
+            recorder.stopRecording { _ in }
+        }
+        captureSession?.stopRunning()
+    }
+
+    // MARK: - Import
+
+    private func handlePhotoSelection(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            isImporting = true
+            Self.logger.info("Photos video selected; starting transferable import")
+            do {
+                guard let imported = try await item.loadTransferable(type: ImportedVideo.self) else {
+                    throw VideoImportError.sourceMissing
+                }
+                let attributes = try FileManager.default.attributesOfItem(atPath: imported.url.path)
+                let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+                guard size > 0 else { throw VideoImportError.emptyFile }
+                await MainActor.run {
+                    Self.logger.info("Video imported successfully (\(size) bytes); navigating to analysis")
+                    isImporting = false
+                    selectedPhoto = nil
+                    analysisURL = imported.url
+                }
+            } catch {
+                await MainActor.run {
+                    Self.logger.error("Photos video import failed: \(error.localizedDescription, privacy: .public)")
+                    isImporting = false
+                    selectedPhoto = nil
+                    errorMessage = "Failed to import video: \(error.localizedDescription)"
+                    showError = true
+                }
+            }
+        }
+    }
+}
+
+/// Dashed head-to-toe framing guide with a side-view reminder.
+private struct FramingGuide: View {
+    var body: some View {
+        GeometryReader { geometry in
+            let inset: CGFloat = 24
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(style: StrokeStyle(lineWidth: 2, dash: [10, 8]))
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(inset)
+
+            VStack {
+                Label("Side view · head to toe in frame", systemImage: "figure.strengthtraining.traditional")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.black.opacity(0.35), in: Capsule())
+                    .padding(.top, inset + 12)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Large camera shutter that shows record progress around its rim.
+private struct RecordButton: View {
+    let isRecording: Bool
+    let progress: Double
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .stroke(.white.opacity(0.35), lineWidth: 4)
+                Circle()
+                    .trim(from: 0, to: max(progress, 0.001))
+                    .stroke(.yellow, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                RoundedRectangle(cornerRadius: isRecording ? 6 : 26, style: .continuous)
+                    .fill(.red)
+                    .frame(width: isRecording ? 30 : 56, height: isRecording ? 30 : 56)
+            }
+            .frame(width: 76, height: 76)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isRecording)
+        .accessibilityLabel(isRecording ? "Stop recording" : "Start recording")
+        .accessibilityHint(isRecording ? "Stops and analyzes the clip" : "Records up to 60 seconds")
     }
 }
 

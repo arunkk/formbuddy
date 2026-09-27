@@ -6,9 +6,21 @@ struct OrientationMapper {
     let transform: CGAffineTransform
     let naturalSize: CGSize
 
+    init(transform: CGAffineTransform, naturalSize: CGSize) {
+        self.transform = transform
+        self.naturalSize = naturalSize
+    }
+
     init(track: AVAssetTrack) {
         self.transform = track.preferredTransform
         self.naturalSize = track.naturalSize
+    }
+
+    /// Size of the video after applying `preferredTransform` (i.e. as displayed).
+    var displayedSize: CGSize {
+        guard naturalSize.width > 0, naturalSize.height > 0 else { return naturalSize }
+        let rect = CGRect(origin: .zero, size: naturalSize).applying(transform)
+        return CGSize(width: abs(rect.width), height: abs(rect.height))
     }
 
     /// Map a normalized landmark coordinate (0-1) to view coordinates.

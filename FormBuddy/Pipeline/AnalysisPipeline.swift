@@ -1,13 +1,22 @@
 import Foundation
 import AVFoundation
 import CoreVideo
+import CoreGraphics
 import Observation
 import OSLog
+
+/// Everything the UI needs to persist and replay one analyzed clip.
+struct AnalysisResult {
+    var report: SquatReport
+    var sidecar: AnnotationSidecar
+    var preferredTransform: CGAffineTransform
+}
 
 private final class AnalysisFrameProcessor: @unchecked Sendable {
     private let estimator: PoseEstimator
     private let smoother = LandmarkSmoother()
     private let analyzer = SquatAnalyzer()
+    private var annotations: [AnnotationFrame] = []
     private(set) var emptyFrames = 0
     private(set) var processedFrames = 0
 
@@ -22,11 +31,21 @@ private final class AnalysisFrameProcessor: @unchecked Sendable {
         )
         if detected == nil { emptyFrames += 1 }
         let smoothed = smoother.update(detected)
-        _ = analyzer.process(PoseFrame(landmarks: smoothed, timestamp: analysisTimestamp))
+        let annotation = analyzer.process(PoseFrame(landmarks: smoothed, timestamp: analysisTimestamp))
+        annotations.append(
+            AnnotationFrame(
+                kneeAngle: annotation.kneeAngle,
+                torsoAngle: annotation.torsoAngle,
+                phase: annotation.phase,
+                repCount: annotation.repCount,
+                faults: annotation.faults,
+                landmarks: smoothed
+            )
+        )
         processedFrames += 1
     }
 
-    func finish(fps: Double) -> SquatReport {
+    func finish(fps: Double) -> (report: SquatReport, sidecar: AnnotationSidecar) {
         var report = analyzer.finish()
         report.videoMeta = [
             "fps": fps,
@@ -36,7 +55,8 @@ private final class AnalysisFrameProcessor: @unchecked Sendable {
         if processedFrames > 0 && Double(emptyFrames) / Double(processedFrames) > 0.2 {
             report.warnings.append("no_person_in_most_frames")
         }
-        return report
+        let sidecar = AnnotationSidecar(frames: annotations, fps: fps, frameCount: processedFrames)
+        return (report, sidecar)
     }
 }
 
@@ -46,7 +66,7 @@ final class AnalysisPipeline {
     private(set) var progress: Double = 0
     private static let logger = Logger(subsystem: "com.formbuddy.app", category: "analysis")
 
-    func analyze(videoAt url: URL) async throws -> SquatReport {
+    func analyze(videoAt url: URL) async throws -> AnalysisResult {
         Self.logger.info("Starting video analysis: \(url.lastPathComponent, privacy: .public)")
         let reader = try VideoFrameReader(url: url)
         let fps = reader.fps
@@ -79,9 +99,9 @@ final class AnalysisPipeline {
         guard processor.processedFrames > 0 else {
             throw NSError(domain: "AnalysisPipeline", code: 2, userInfo: [NSLocalizedDescriptionKey: "No video frames could be decoded from the selected clip."])
         }
-        let report = processor.finish(fps: fps)
+        let (report, sidecar) = processor.finish(fps: fps)
         progress = 1
         Self.logger.info("Analysis complete: frames=\(processor.processedFrames), reps=\(report.summary.totalReps), emptyFrames=\(processor.emptyFrames)")
-        return report
+        return AnalysisResult(report: report, sidecar: sidecar, preferredTransform: reader.preferredTransform)
     }
 }
