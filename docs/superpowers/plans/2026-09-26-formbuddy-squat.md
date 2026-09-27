@@ -194,11 +194,13 @@
 
 ---
 
-### Task 8: Full test suite green + manual verification
+### Task 8: Full test suite green + end-to-end verification with testdata video
 
-**Files:** none new.
+**Files:**
+- Create: `.gitignore` (ignore `testdata/` — videos are never committed)
+- Create: `testdata/` with one side-view squat video (downloaded Creative Commons clip, or user-supplied `sample_squat.mp4`)
 
-- [ ] **Step 1: Run the whole suite** — `python -m pytest tests/ -v` → all PASS.
-- [ ] **Step 2: CLI smoke test** — `python -m formbuddy.cli --help` and `formbuddy --help` both print usage and exit 0.
-- [ ] **Step 3: Manual verification** — user records a side-view squat clip, runs the CLI on it, checks the annotated video and report are sensible; file any issues found as bugs (do not silently expand scope).
-- [ ] **Step 4: Commit** any fixes with `git commit -m "fix: <description>"`.
+- [ ] **Step 1: Run the whole suite** — `.venv/bin/python -m pytest tests/ -v` → all PASS.
+- [ ] **Step 2: CLI smoke test** — `.venv/bin/python -m formbuddy.cli --help` and `formbuddy --help` both print usage and exit 0.
+- [ ] **Step 3: End-to-end verification** — run the CLI on `testdata/sample_squat.mp4`; check the annotated video and report are sensible (reps detected, depth categories plausible, no crash); file any issues found as bugs (do not silently expand scope). If no video could be obtained for testdata/, report that and ask the user for one.
+- [ ] **Step 4: Commit** any fixes (never the video) with `git commit -m "fix: <description>"`.
