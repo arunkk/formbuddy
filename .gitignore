@@ -1,5 +1,28 @@
+# macOS
+.DS_Store
+
+# Xcode / iOS
 .build/
 DerivedData/
+build/
 *.xcuserstate
 xcuserdata/
 Pods/
+*.xccheckout
+*.xcscmblueprint
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local run output and media fixtures (videos are never committed)
+out/
+testdata/
