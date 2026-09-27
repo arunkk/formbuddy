@@ -1,0 +1,7 @@
+# orca.yaml
+worktree:
+  sharedDirectories:
+    - .agent/skills
+    - .venv
+    - testdata
+
