@@ -148,10 +148,56 @@ enum PersonMaskBuilder {
         return visible == 0 ? 1.0 : Double(inside) / Double(visible)
     }
 
+    /// Box-downsample a probability map to a bounded resolution.
+    ///
+    /// MediaPipe returns the mask at the input frame size (up to ~2M pixels for
+    /// 1080p). The silhouette is smooth, so the expensive morphology, connected
+    /// components, and suppression look identical at a few hundred pixels — and
+    /// running them at full resolution every frame dominates analysis time. The
+    /// landmark gate uses normalized coordinates, so it is resolution-agnostic.
+    static func downsample(
+        probability: UnsafePointer<Float>,
+        width: Int,
+        height: Int,
+        maxDimension: Int = 256
+    ) -> (pixels: [Float], width: Int, height: Int) {
+        guard width > 0, height > 0 else { return ([], 0, 0) }
+        let longest = max(width, height)
+        guard longest > maxDimension else {
+            return (Array(UnsafeBufferPointer(start: probability, count: width * height)), width, height)
+        }
+
+        let outWidth = max(1, Int((Double(width) * Double(maxDimension) / Double(longest)).rounded()))
+        let outHeight = max(1, Int((Double(height) * Double(maxDimension) / Double(longest)).rounded()))
+        var output = [Float](repeating: 0, count: outWidth * outHeight)
+
+        for oy in 0..<outHeight {
+            let y0 = oy * height / outHeight
+            let y1 = max(y0 + 1, (oy + 1) * height / outHeight)
+            for ox in 0..<outWidth {
+                let x0 = ox * width / outWidth
+                let x1 = max(x0 + 1, (ox + 1) * width / outWidth)
+                var sum: Float = 0
+                var count = 0
+                for y in y0..<y1 {
+                    let row = y * width
+                    for x in x0..<x1 {
+                        sum += probability[row + x]
+                        count += 1
+                    }
+                }
+                output[oy * outWidth + ox] = count > 0 ? sum / Float(count) : 0
+            }
+        }
+        return (output, outWidth, outHeight)
+    }
+
     /// Overwrite every non-person pixel of a BGRA pixel buffer with `fill`.
     ///
-    /// The mask is resampled nearest-neighbour, so a mask at a different
-    /// resolution than the frame still lines up.
+    /// The mask is resampled nearest-neighbour so it lines up at any
+    /// resolution. Background is filled in contiguous spans while walking the
+    /// (small) mask columns, so the per-pixel mask lookups scale with the mask,
+    /// not the frame.
     static func suppressBackground(
         pixelBuffer: CVPixelBuffer,
         mask: PersonMask,
@@ -167,18 +213,48 @@ enum PersonMaskBuilder {
         let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
         let pointer = base.assumingMemoryBound(to: UInt8.self)
 
-        for y in 0..<height {
-            let maskY = min(mask.height - 1, y * mask.height / height)
-            let row = pointer + y * bytesPerRow
-            for x in 0..<width {
-                let maskX = min(mask.width - 1, x * mask.width / width)
-                guard !mask.isPerson(x: maskX, y: maskY) else { continue }
-                let pixel = row + x * 4
-                pixel[0] = fill
-                pixel[1] = fill
-                pixel[2] = fill
-                pixel[3] = 255
+        // Output column for each mask column boundary (mask is smaller).
+        var columnStart = [Int](repeating: 0, count: mask.width + 1)
+        for column in 0...mask.width {
+            columnStart[column] = min(width, Int((Double(column) * Double(width) / Double(mask.width)).rounded()))
+        }
+
+        mask.pixels.withUnsafeBufferPointer { maskPixels in
+            for y in 0..<height {
+                let maskRow = min(mask.height - 1, y * mask.height / height) * mask.width
+                let row = pointer + y * bytesPerRow
+                var backgroundStart = -1
+
+                for column in 0..<mask.width {
+                    let startX = columnStart[column]
+                    let endX = max(startX, min(width, columnStart[column + 1]))
+                    guard endX > startX else { continue }
+
+                    if maskPixels[maskRow + column] != 0 {
+                        if backgroundStart >= 0 {
+                            fillRun(row: row, from: backgroundStart, to: startX, value: fill)
+                            backgroundStart = -1
+                        }
+                    } else if backgroundStart < 0 {
+                        backgroundStart = startX
+                    }
+                }
+
+                if backgroundStart >= 0 {
+                    fillRun(row: row, from: backgroundStart, to: width, value: fill)
+                }
             }
+        }
+    }
+
+    @inline(__always)
+    private static func fillRun(row: UnsafeMutablePointer<UInt8>, from start: Int, to end: Int, value: UInt8) {
+        var pixel = row + start * 4
+        for _ in start..<end {
+            pixel[0] = value
+            pixel[1] = value
+            pixel[2] = value
+            pixel += 4
         }
     }
 

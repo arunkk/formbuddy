@@ -32,7 +32,7 @@ enum FeedbackCardRenderer {
         let view = RepStillView(image: image, frame: frame, rep: rep, mapper: mapper, showsCaption: false)
             .frame(width: thumbnailWidth)
         let renderer = ImageRenderer(content: view)
-        renderer.scale = 3
+        renderer.scale = 2
         renderer.isOpaque = true
         return renderer.uiImage
     }

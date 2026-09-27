@@ -3,7 +3,7 @@
 
 # Xcode / iOS
 .build/
-.build-dd/
+.build-dd*/
 DerivedData/
 build/
 *.xcuserstate

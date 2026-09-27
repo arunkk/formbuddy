@@ -327,6 +327,10 @@ struct SessionDetailView: View {
             if needsCardStill {
                 stills.append(CoachCardStill(rep: item.result, frame: frame, image: still))
             }
+
+            // Rendering thumbnails runs on the main actor; yield so the screen
+            // stays responsive while a long set's card is built.
+            await Task.yield()
         }
 
         if cardImage == nil, !stills.isEmpty {

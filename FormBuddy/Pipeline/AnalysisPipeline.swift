@@ -31,18 +31,22 @@ private final class AnalysisFrameProcessor: @unchecked Sendable {
     func process(pixelBuffer: CVPixelBuffer, presentationTimestamp: Double, analysisTimestamp: Double) {
         let timestampMs = Int64(presentationTimestamp * 1000)
 
+        // Analyze at a bounded resolution; landmarks are normalized, so the
+        // report is unaffected, and the mask/suppression work stays small.
+        let frameBuffer = FrameScaler.scaled(pixelBuffer) ?? pixelBuffer
+
         // Segment the best person, then hide everything else so the pose model
         // never sees the rack, plates or benches.
         var mask: PersonMask?
         if let segmenter {
-            mask = segmenter.process(pixelBuffer: pixelBuffer, timestampMs: timestampMs)
+            mask = segmenter.process(pixelBuffer: frameBuffer, timestampMs: timestampMs)
             if let mask {
-                PersonMaskBuilder.suppressBackground(pixelBuffer: pixelBuffer, mask: mask)
+                PersonMaskBuilder.suppressBackground(pixelBuffer: frameBuffer, mask: mask)
                 segmentedFrames += 1
             }
         }
 
-        var detected = estimator.process(pixelBuffer: pixelBuffer, timestampMs: timestampMs)
+        var detected = estimator.process(pixelBuffer: frameBuffer, timestampMs: timestampMs)
 
         // Drop pose results that fall mostly outside the silhouette (the model
         // locked onto the environment rather than the lifter).

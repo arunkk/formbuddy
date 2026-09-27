@@ -38,8 +38,18 @@ final class PersonSegmenter {
             let width = Int(mask.width)
             let height = Int(mask.height)
             guard width > 0, height > 0 else { return nil }
-            let probability = Array(UnsafeBufferPointer(start: mask.float32Data, count: width * height))
-            return PersonMaskBuilder.bestPersonMask(probability: probability, width: width, height: height)
+            // Bounded resolution: the full-size mask makes the Swift mask maths
+            // (morphology, components, suppression) needlessly expensive.
+            let (probability, maskWidth, maskHeight) = PersonMaskBuilder.downsample(
+                probability: mask.float32Data,
+                width: width,
+                height: height
+            )
+            return PersonMaskBuilder.bestPersonMask(
+                probability: probability,
+                width: maskWidth,
+                height: maskHeight
+            )
         } catch {
             return nil
         }

@@ -75,6 +75,50 @@ final class PersonMaskTests: XCTestCase {
         XCTAssertEqual(PersonMaskBuilder.landmarkInsideFraction(mask, landmarks: landmarks), 1.0, accuracy: 1e-9)
     }
 
+    // MARK: - downscale
+
+    func testDownsampleCapsResolutionAndPreservesPerson() throws {
+        let width = 1080, height = 1920
+        var probability = [Float](repeating: 0, count: width * height)
+        for y in 200..<1700 { for x in 300..<800 { probability[y * width + x] = 1 } }
+
+        let (pixels, w, h) = probability.withUnsafeBufferPointer { buffer in
+            PersonMaskBuilder.downsample(
+                probability: buffer.baseAddress!, width: width, height: height, maxDimension: 256
+            )
+        }
+        XCTAssertLessThanOrEqual(max(w, h), 256)
+        XCTAssertEqual(w, 144) // 1080 * 256 / 1920
+        XCTAssertEqual(h, 256)
+
+        let mask = try XCTUnwrap(PersonMaskBuilder.bestPersonMask(probability: pixels, width: w, height: h))
+        XCTAssertGreaterThan(mask.coverage, 0.15)
+    }
+
+    func testPerFrameMaskCost() throws {
+        let width = 1080, height = 1920
+        let buffer = try XCTUnwrap(makePixelBuffer(width: width, height: height))
+
+        // Mirror the pipeline: scale the frame, segment at that size, mask,
+        // then suppress on the scaled frame.
+        let scaledWidth = 288, scaledHeight = 512
+        var probability = [Float](repeating: 0, count: scaledWidth * scaledHeight)
+        for y in 50..<450 { for x in 80..<210 { probability[y * scaledWidth + x] = 1 } }
+
+        let start = Date()
+        let frame = FrameScaler.scaled(buffer) ?? buffer
+        let (pixels, w, h) = probability.withUnsafeBufferPointer { source in
+            PersonMaskBuilder.downsample(
+                probability: source.baseAddress!, width: scaledWidth, height: scaledHeight, maxDimension: 256
+            )
+        }
+        let mask = try XCTUnwrap(PersonMaskBuilder.bestPersonMask(probability: pixels, width: w, height: h))
+        PersonMaskBuilder.suppressBackground(pixelBuffer: frame, mask: mask)
+        let elapsed = Date().timeIntervalSince(start)
+        print("[perf] per-frame mask path: \(String(format: "%.3f", elapsed))s (frame \(CVPixelBufferGetWidth(frame))x\(CVPixelBufferGetHeight(frame)), mask \(w)x\(h))")
+        XCTAssertLessThan(elapsed, 1.0)
+    }
+
     // MARK: - suppressBackground
 
     private func makePixelBuffer(width: Int, height: Int) -> CVPixelBuffer? {
