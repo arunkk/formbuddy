@@ -59,7 +59,10 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             write_video=not args.no_video,
         )
-    except FileNotFoundError as exc:
+    except OSError as exc:
+        # FileNotFoundError (unreadable input) and other OS errors such as
+        # PermissionError creating the output dir both get a clean
+        # one-line message instead of a traceback.
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

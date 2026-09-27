@@ -37,6 +37,30 @@ class TestUnsupportedExercise:
         assert "deadlift" in capsys.readouterr().err
 
 
+class TestOSError:
+    """Non-FileNotFoundError OS errors from run() → clean message + exit 1."""
+
+    def test_permission_error_returns_1(self, tmp_path, monkeypatch, capsys):
+        """e.g. PermissionError creating the output dir → 'error:' on
+        stderr, exit code 1, no traceback."""
+
+        def fake_run(
+            input_path,
+            exercise="squat",
+            output_dir="./out",
+            write_video=True,
+            estimator=None,
+        ):
+            raise PermissionError("cannot create output dir")
+
+        monkeypatch.setattr("formbuddy.cli.run", fake_run)
+
+        rc = main(["--input", str(tmp_path / "x.mp4")])
+
+        assert rc == 1
+        assert "error:" in capsys.readouterr().err
+
+
 class TestSuccess:
     """main() wires argv to pipeline.run and prints the one-line summary."""
 

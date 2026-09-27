@@ -75,30 +75,40 @@ def run(
         raise ValueError(f"unknown exercise {exercise!r} (known: {known})")
 
     cap = cv2.VideoCapture(input_path)
-    if not cap.isOpened():
-        raise FileNotFoundError(f"cannot open video file: {input_path}")
 
     own_estimator = estimator is None
     if own_estimator:
         estimator = PoseEstimator()
 
-    smoother = LandmarkSmoother()
-    frames: list[np.ndarray] = []
-    landmarks_per_frame: list[np.ndarray | None] = []
-    timestamps: list[float] = []
-    empty_frames = 0
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
     try:
+        if not cap.isOpened():
+            raise FileNotFoundError(f"cannot open video file: {input_path}")
+
+        smoother = LandmarkSmoother()
+        frames: list[np.ndarray] = []
+        landmarks_per_frame: list[np.ndarray | None] = []
+        timestamps: list[float] = []
+        empty_frames = 0
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            # Some containers/codecs report fps as 0; fall back to a
+            # default so timestamps and duration stay well-defined.
+            fps = 30.0
+
         index = 0
         while True:
             ok, bgr = cap.read()
             if not ok:
                 break
-            smoothed = smoother.update(estimator.process(bgr))
-            if smoothed is None:
+            # Count empty frames at the detection level: a frame where the
+            # estimator found no person.  The smoother deliberately carries
+            # the last landmarks forward for the analysis stream, so its
+            # return value must not be used for the empty-frame ratio.
+            detected = estimator.process(bgr)
+            if detected is None:
                 empty_frames += 1
-            else:
+            smoothed = smoother.update(detected)
+            if smoothed is not None:
                 # The smoother returns its internal mutable state; copy so
                 # each retained frame keeps its own snapshot.
                 smoothed = smoothed.copy()
@@ -121,7 +131,7 @@ def run(
     report.video_meta = {
         "fps": fps,
         "frame_count": frame_count,
-        "duration": frame_count / fps if fps > 0 else 0.0,
+        "duration": frame_count / fps,
     }
     if frame_count > 0 and empty_frames / frame_count > _EMPTY_FRAME_RATIO_THRESHOLD:
         report.warnings.append(EMPTY_FRAME_WARNING)

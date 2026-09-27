@@ -75,6 +75,8 @@ class SquatSummary:
     avg_eccentric_seconds: float
     avg_concentric_seconds: float
     avg_bottom_pause_seconds: float
+    avg_torso_angle_at_bottom: float
+    max_torso_angle: float
 
 
 @dataclass
@@ -103,6 +105,8 @@ class SquatReport(ExerciseReport):
             avg_eccentric_seconds=0.0,
             avg_concentric_seconds=0.0,
             avg_bottom_pause_seconds=0.0,
+            avg_torso_angle_at_bottom=0.0,
+            max_torso_angle=0.0,
         )
     )
     frames: list[FrameAnnotation] = field(default_factory=list)
@@ -221,7 +225,7 @@ class SquatAnalyzer(ExerciseAnalyzer):
                 )
             )
 
-        report.summary = self._summarize(report.reps)
+        report.summary = self._summarize(report.reps, report.frames)
         return report
 
     # ------------------------------------------------------------------
@@ -310,8 +314,32 @@ class SquatAnalyzer(ExerciseAnalyzer):
         )
 
     @staticmethod
-    def _summarize(reps: list[RepResult]) -> SquatSummary:
-        """Aggregate per-rep results into a SquatSummary."""
+    def _summarize(
+        reps: list[RepResult],
+        frames: list[FrameAnnotation] | None = None,
+    ) -> SquatSummary:
+        """Aggregate per-rep results into a SquatSummary.
+
+        ``avg_torso_angle_at_bottom`` is the mean of the per-rep bottom
+        torso angles over *all* reps: every rep has a measured bottom by
+        construction (``_build_rep`` asserts ``bottom_knee_angle`` is not
+        None), so none are excluded.  Reps whose torso was not measurable
+        at the bottom carry the 0.0 fallback in ``torso_angle_at_bottom``
+        and are included in the mean.
+
+        ``max_torso_angle`` is the maximum torso angle over all *measured
+        frames*, not just rep bottoms: the spec asks for the max without
+        qualification, so a lifter who leans hard mid-descent but recovers
+        by the bottom is still reflected in the summary.
+        """
+        max_torso_angle = 0.0
+        if frames:
+            measured = [
+                ann.torso_angle for ann in frames if ann.torso_angle is not None
+            ]
+            if measured:
+                max_torso_angle = max(measured)
+
         n = len(reps)
         if n == 0:
             return SquatSummary(
@@ -323,6 +351,8 @@ class SquatAnalyzer(ExerciseAnalyzer):
                 avg_eccentric_seconds=0.0,
                 avg_concentric_seconds=0.0,
                 avg_bottom_pause_seconds=0.0,
+                avg_torso_angle_at_bottom=0.0,
+                max_torso_angle=max_torso_angle,
             )
         return SquatSummary(
             total_reps=n,
@@ -333,4 +363,8 @@ class SquatAnalyzer(ExerciseAnalyzer):
             avg_eccentric_seconds=sum(r.eccentric_seconds for r in reps) / n,
             avg_concentric_seconds=sum(r.concentric_seconds for r in reps) / n,
             avg_bottom_pause_seconds=sum(r.bottom_pause_seconds for r in reps) / n,
+            avg_torso_angle_at_bottom=(
+                sum(r.torso_angle_at_bottom for r in reps) / n
+            ),
+            max_torso_angle=max_torso_angle,
         )

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from formbuddy.analyzers.squat import (
     FAULT_INSUFFICIENT_DEPTH,
     RepResult,
@@ -51,6 +53,8 @@ def make_report() -> SquatReport:
             avg_eccentric_seconds=2.1,
             avg_concentric_seconds=0.75,
             avg_bottom_pause_seconds=0.25,
+            avg_torso_angle_at_bottom=11.0,
+            max_torso_angle=25.0,
         ),
     )
 
@@ -93,3 +97,25 @@ def test_text_contains_rep_lines_and_fault(tmp_path):
     assert "#1" in text
     assert "#2" in text
     assert FAULT_INSUFFICIENT_DEPTH in text
+
+
+def test_build_returns_video_meta_and_warnings_keys(tmp_path):
+    """The returned JSON dict carries the video_meta and warnings keys."""
+    result = ReportBuilder().build(make_report(), str(tmp_path))
+    assert "video_meta" in result
+    assert "warnings" in result
+
+
+def test_summary_torso_fields_in_json(tmp_path):
+    """The torso summary fields appear in the returned JSON dict."""
+    result = ReportBuilder().build(make_report(), str(tmp_path))
+    assert result["summary"]["avg_torso_angle_at_bottom"] == pytest.approx(11.0)
+    assert result["summary"]["max_torso_angle"] == pytest.approx(25.0)
+
+
+def test_text_contains_torso_summary_lines(tmp_path):
+    """report.txt includes the torso summary lines."""
+    ReportBuilder().build(make_report(), str(tmp_path))
+    text = (tmp_path / "report.txt").read_text()
+    assert "Avg torso angle at bottom" in text
+    assert "Max torso angle" in text

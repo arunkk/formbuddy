@@ -28,8 +28,12 @@ class ReportBuilder:
             "warnings": report.warnings,
         }
 
-        (out / "report.json").write_text(json.dumps(data, indent=2) + "\n")
-        (out / "report.txt").write_text(self._render_text(report))
+        (out / "report.json").write_text(
+            json.dumps(data, indent=2) + "\n", encoding="utf-8"
+        )
+        (out / "report.txt").write_text(
+            self._render_text(report), encoding="utf-8"
+        )
         return data
 
     @staticmethod
@@ -47,6 +51,8 @@ class ReportBuilder:
             f"Avg eccentric seconds: {s.avg_eccentric_seconds:.2f}",
             f"Avg concentric seconds: {s.avg_concentric_seconds:.2f}",
             f"Avg bottom pause seconds: {s.avg_bottom_pause_seconds:.2f}",
+            f"Avg torso angle at bottom: {s.avg_torso_angle_at_bottom:.2f}",
+            f"Max torso angle: {s.max_torso_angle:.2f}",
         ]
         for rep in report.reps:
             lines.append(

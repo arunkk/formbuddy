@@ -382,3 +382,52 @@ class TestZeroVisibility:
         frames = make_frames(angles, zero_visibility=True)
         report = SquatAnalyzer().analyze(frames)
         assert report.summary.partial_reps == 0
+
+
+# ---------------------------------------------------------------------------
+# Torso summary fields
+# ---------------------------------------------------------------------------
+
+class TestTorsoSummaryFields:
+    """SquatSummary carries torso-angle aggregates."""
+
+    def test_avg_torso_angle_at_bottom_two_reps(self):
+        """avg_torso_angle_at_bottom is the mean of per-rep
+        torso_angle_at_bottom over all reps (10° and 20° → 15°)."""
+        down = np.linspace(170, 80, 20).tolist()
+        up = np.linspace(80, 170, 20).tolist()
+        hold = [170.0] * 5
+        angles = hold + down + up + hold + down + up + hold
+        torso = (
+            [0.0] * 5
+            + [10.0] * 40  # rep 1: 10° lean through descent + ascent
+            + [0.0] * 5
+            + [20.0] * 40  # rep 2: 20° lean
+            + [0.0] * 5
+        )
+        report = SquatAnalyzer().analyze(
+            make_frames(angles, torso_angles=torso, dt=0.1)
+        )
+        assert report.summary.total_reps == 2
+        assert report.summary.avg_torso_angle_at_bottom == pytest.approx(
+            15.0, abs=1e-3
+        )
+
+    def test_max_torso_angle_across_all_frames(self):
+        """max_torso_angle is the max over all measured frames, not just
+        rep bottoms: a 60° mid-descent spike with only 10° at the bottom."""
+        down = np.linspace(170, 80, 20).tolist()
+        up = np.linspace(80, 170, 20).tolist()
+        hold = [170.0] * 5
+        angles = hold + down + up + hold
+        t_hold = [0.0] * 5
+        t_down = list(np.linspace(0, 60, 10)) + list(np.linspace(60, 10, 10))
+        t_up = list(np.linspace(10, 0, 20))
+        torso = t_hold + t_down + t_up + t_hold
+        report = SquatAnalyzer().analyze(
+            make_frames(angles, torso_angles=torso, dt=0.1)
+        )
+        assert report.summary.avg_torso_angle_at_bottom == pytest.approx(
+            10.0, abs=1e-3
+        )
+        assert report.summary.max_torso_angle == pytest.approx(60.0, abs=1e-3)
