@@ -26,9 +26,13 @@ struct AnalyzingView: View {
                     .foregroundColor(.red)
                     .padding()
             } else {
-                ProgressView(value: pipeline.progress)
-                    .frame(width: 200)
-                Text("Analyzing... \(Int(pipeline.progress * 100))%")
+                if pipeline.progress > 0 {
+                    ProgressView(value: pipeline.progress)
+                        .frame(width: 200)
+                    Text("Analyzing... \(Int(pipeline.progress * 100))%")
+                } else {
+                    ProgressView("Preparing analysis…")
+                }
                 Text("This may take longer than the clip itself (iOS is CPU-only)")
                     .font(.caption)
                     .foregroundColor(.secondary)
