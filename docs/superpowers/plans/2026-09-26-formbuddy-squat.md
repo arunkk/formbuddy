@@ -200,7 +200,7 @@
 - Create: `.gitignore` (ignore `testdata/` — videos are never committed)
 - Create: `testdata/` with one side-view squat video (downloaded Creative Commons clip, or user-supplied `sample_squat.mp4`)
 
-- [ ] **Step 1: Run the whole suite** — `.venv/bin/python -m pytest tests/ -v` → all PASS.
-- [ ] **Step 2: CLI smoke test** — `.venv/bin/python -m formbuddy.cli --help` and `formbuddy --help` both print usage and exit 0.
-- [ ] **Step 3: End-to-end verification** — run the CLI on `testdata/sample_squat.mp4`; check the annotated video and report are sensible (reps detected, depth categories plausible, no crash); file any issues found as bugs (do not silently expand scope). If no video could be obtained for testdata/, report that and ask the user for one.
-- [ ] **Step 4: Commit** any fixes (never the video) with `git commit -m "fix: <description>"`.
+- [x] **Step 1: Run the whole suite** — `.venv/bin/python -m pytest tests/ -v` → all PASS (77 tests after fix wave).
+- [x] **Step 2: CLI smoke test** — `.venv/bin/python -m formbuddy.cli --help` and `formbuddy --help` both print usage and exit 0; missing input → clean error + exit 1.
+- [x] **Step 3: End-to-end verification** — ran the CLI on `testdata/IMG_5192.mov` (59.3s, 1772 frames, 1080x1920): `reps=27 below_parallel=16`, exit 0, 38.7s wall clock; annotated video (72MB) + report.json + report.txt all written; per-rep depth/faults/tempo plausible.
+- [x] **Step 4: Commit** fixes (never the video) — fix wave commit `5ded91f`.
