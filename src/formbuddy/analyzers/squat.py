@@ -236,6 +236,8 @@ class SquatAnalyzer(ExerciseAnalyzer):
         measure (empty frame).
         """
         landmarks = frame.landmarks
+        if landmarks is None:
+            return None, None
         left_ids = [SIDE_LANDMARKS["left"][k] for k in _SIDE_KEY]
         right_ids = [SIDE_LANDMARKS["right"][k] for k in _SIDE_KEY]
         left_vis = float(np.mean(landmarks[left_ids, 2]))

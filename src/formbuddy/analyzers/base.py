@@ -14,13 +14,14 @@ class Frame:
 
     Parameters
     ----------
-    landmarks : np.ndarray of shape (33, 3)
-        Pose landmarks with columns (x, y, visibility).
+    landmarks : np.ndarray of shape (33, 3) or None
+        Pose landmarks with columns (x, y, visibility); None when no pose
+        was detected in the frame.
     timestamp : float
         Seconds since the start of the clip.
     """
 
-    landmarks: np.ndarray
+    landmarks: np.ndarray | None
     timestamp: float
 
 
