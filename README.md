@@ -150,6 +150,13 @@ highlights faults on the body, a per-rep strip (tap a rep to loop it) with a
 plain-language note per fault, and a shareable "coach's card" still that shows
 every rep's faults at a glance.
 
+Pose is gated by person segmentation (the same `selfie_segmenter.tflite` the
+CLI ships): each frame is masked to the best person before pose estimation, and
+pose results that fall mostly outside the person silhouette are dropped, so the
+rack uprights, plates and benches are ignored. `report.json` records
+`segmented_frames` and `pose_rejected_outside_person` under `video_meta`, as the
+Python pipeline does.
+
 ## Development
 
 ```bash
