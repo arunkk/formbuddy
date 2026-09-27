@@ -11,7 +11,9 @@ final class AnalysisPipeline {
         let reader = try VideoFrameReader(url: url)
         let fps = reader.fps
 
-        let estimator = PoseEstimator()!
+        guard let estimator = PoseEstimator() else {
+            throw NSError(domain: "AnalysisPipeline", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to initialize pose estimator"])
+        }
         let smoother = LandmarkSmoother()
         let analyzer = SquatAnalyzer()
 

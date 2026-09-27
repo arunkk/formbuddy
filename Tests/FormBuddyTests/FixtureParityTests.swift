@@ -73,6 +73,9 @@ final class FixtureParityTests: XCTestCase {
         XCTAssertEqual(report.summary.repsBelowParallel, f.expected.summary.reps_below_parallel)
         XCTAssertEqual(report.summary.repsAtParallel, f.expected.summary.reps_at_parallel)
         XCTAssertEqual(report.summary.repsAboveParallel, f.expected.summary.reps_above_parallel)
+        XCTAssertEqual(report.summary.avgEccentricSeconds, f.expected.summary.avg_eccentric_seconds, accuracy: 1e-4)
+        XCTAssertEqual(report.summary.avgConcentricSeconds, f.expected.summary.avg_concentric_seconds, accuracy: 1e-4)
+        XCTAssertEqual(report.summary.avgBottomPauseSeconds, f.expected.summary.avg_bottom_pause_seconds, accuracy: 1e-4)
         XCTAssertEqual(report.reps.count, f.expected.reps.count)
         for (actual, expected) in zip(report.reps, f.expected.reps) {
             XCTAssertEqual(actual.repNumber, expected.rep_number)

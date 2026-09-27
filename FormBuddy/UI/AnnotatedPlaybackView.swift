@@ -5,13 +5,15 @@ import AVKit
 struct AnnotatedPlaybackView: View {
     let videoURL: URL
     let annotations: [FrameAnnotation]
+    let fps: Double
     @State private var player: AVPlayer
     @State private var currentFrame: Int = 0
     @State private var timeObserver: Any?
 
-    init(videoURL: URL, annotations: [FrameAnnotation]) {
+    init(videoURL: URL, annotations: [FrameAnnotation], fps: Double = 30.0) {
         self.videoURL = videoURL
         self.annotations = annotations
+        self.fps = fps
         _player = State(initialValue: AVPlayer(url: videoURL))
     }
 
@@ -32,9 +34,9 @@ struct AnnotatedPlaybackView: View {
             }
         }
         .onAppear {
-            let interval = CMTime(seconds: 0.033, preferredTimescale: 600)
+            let interval = CMTime(seconds: 1.0 / fps, preferredTimescale: 600)
             timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-                let frame = Int(time.seconds * 30)
+                let frame = Int(time.seconds * fps)
                 if frame < annotations.count {
                     currentFrame = frame
                 }

@@ -8,18 +8,25 @@ struct CaptureView: View {
     @State private var showAnalyzing = false
     @State private var elapsed: TimeInterval = 0
     @State private var timer: Timer?
+    @State private var previewLayer: AVCaptureVideoPreviewLayer?
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                if let layer = previewLayer {
+                    CameraPreviewView(previewLayer: layer)
+                        .ignoresSafeArea()
+                } else {
+                    Color.black.ignoresSafeArea()
+                }
                 VStack {
-                    Text(isRecording ? "Recording..." : "Tap to record")
-                        .foregroundColor(.white)
-                        .font(.title)
+                    Spacer()
                     if isRecording {
                         Text(String(format: "%.1fs / 60s max", elapsed))
                             .foregroundColor(.yellow)
+                            .padding()
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(8)
                     }
                 }
             }
@@ -40,6 +47,26 @@ struct CaptureView: View {
                     AnalyzingView(videoURL: url)
                 }
             }
+            .onAppear {
+                setupPreview()
+            }
+            .onDisappear {
+                recorder.stopRecording { _ in }
+            }
+        }
+    }
+
+    private func setupPreview() {
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return }
+        guard let input = try? AVCaptureDeviceInput(device: device) else { return }
+        let session = AVCaptureSession()
+        session.sessionPreset = .hd1280x720
+        if session.canAddInput(input) { session.addInput(input) }
+        let layer = AVCaptureVideoPreviewLayer(session: session)
+        layer.videoGravity = .resizeAspectFill
+        previewLayer = layer
+        DispatchQueue.global(qos: .userInitiated).async {
+            session.startRunning()
         }
     }
 
@@ -61,5 +88,20 @@ struct CaptureView: View {
             showAnalyzing = true
         }
         isRecording = false
+    }
+}
+
+struct CameraPreviewView: UIViewRepresentable {
+    let previewLayer: AVCaptureVideoPreviewLayer
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        previewLayer.frame = view.bounds
+        view.layer.addSublayer(previewLayer)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        previewLayer.frame = uiView.bounds
     }
 }

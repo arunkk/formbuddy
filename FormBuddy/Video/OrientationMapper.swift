@@ -11,20 +11,32 @@ struct OrientationMapper {
         self.naturalSize = track.naturalSize
     }
 
-    func map(point: CGPoint) -> CGPoint {
-        // Apply the preferred transform to map from natural coordinates to view coordinates
-        let transformed = point.applying(transform)
-        return transformed
-    }
-
+    /// Map a normalized landmark coordinate (0-1) to view coordinates.
+    /// Correctly handles the dimension swap from 90°/270° rotations.
     func mapLandmark(x: Double, y: Double, viewSize: CGSize) -> CGPoint {
-        // Landmarks are normalized (0-1) to the natural buffer
         let naturalPoint = CGPoint(x: x * naturalSize.width, y: y * naturalSize.height)
-        let transformed = map(point: naturalPoint)
-        // Scale to view size
+
+        // Transform all four corners to find the post-transform bounding box
+        let corners = [
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: naturalSize.width, y: 0),
+            CGPoint(x: 0, y: naturalSize.height),
+            CGPoint(x: naturalSize.width, y: naturalSize.height),
+        ]
+        let transformed = corners.map { $0.applying(transform) }
+        let minX = transformed.map { $0.x }.min()!
+        let maxX = transformed.map { $0.x }.max()!
+        let minY = transformed.map { $0.y }.min()!
+        let maxY = transformed.map { $0.y }.max()!
+
+        let transformedWidth = maxX - minX
+        let transformedHeight = maxY - minY
+
+        let transformedPoint = naturalPoint.applying(transform)
+
         return CGPoint(
-            x: transformed.x * viewSize.width / naturalSize.width,
-            y: transformed.y * viewSize.height / naturalSize.height
+            x: (transformedPoint.x - minX) / transformedWidth * viewSize.width,
+            y: (transformedPoint.y - minY) / transformedHeight * viewSize.height
         )
     }
 }
