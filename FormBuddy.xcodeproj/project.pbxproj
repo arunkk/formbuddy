@@ -15,6 +15,8 @@
 		6C91305DED2CEACB988AB5CE /* Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08E476B07A297854DBB5DC9 /* Geometry.swift */; };
 		7D68F023C655541472F6A932 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA87EF4A7CE628ED6256B1B3 /* Session.swift */; };
 		83C7766E32EA2070E230440F /* GeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F8759D6DEEC3993B2AC0C /* GeometryTests.swift */; };
+		8DA0EE5700AEAD15B61512B7 /* SmoothingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 385668D4384DF4E8BA2C7191 /* SmoothingTests.swift */; };
+		8E6DA313DEA39D719FE3D433 /* LandmarkSmoother.swift in Sources */ = {isa = PBXBuildFile; fileRef = 773858E3E4BF02C99DDF64C6 /* LandmarkSmoother.swift */; };
 		9CFB5176744A5398ECA19BCC /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4302E0A3F5F7194E499B7956 /* RootView.swift */; };
 		AAFB45DED987E99B583D68F0 /* parallel_95.json in Resources */ = {isa = PBXBuildFile; fileRef = D56F1AF02226D0A4F9A8E2D8 /* parallel_95.json */; };
 		ADF9D5691D543ADECF1764A9 /* GuidanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE75ED321F8877216EC05063 /* GuidanceView.swift */; };
@@ -41,9 +43,11 @@
 		0FA1A2912F1DAADEC6269DBB /* partial_rep.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = partial_rep.json; sourceTree = "<group>"; };
 		10C3C9880C623B8DA75FE993 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		21030906EF594AE04F941627 /* uncontrolled_descent.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = uncontrolled_descent.json; sourceTree = "<group>"; };
+		385668D4384DF4E8BA2C7191 /* SmoothingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmoothingTests.swift; sourceTree = "<group>"; };
 		4302E0A3F5F7194E499B7956 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		513ABD595026C7EC7C0DE484 /* above_parallel_110.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = above_parallel_110.json; sourceTree = "<group>"; };
 		5435C127B0567844FF4C3E6E /* FormBuddyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FormBuddyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		773858E3E4BF02C99DDF64C6 /* LandmarkSmoother.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandmarkSmoother.swift; sourceTree = "<group>"; };
 		9ED847EF24DA52506868706C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A629E8143913E0773EB1A8C5 /* FormBuddyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormBuddyApp.swift; sourceTree = "<group>"; };
 		A8DD01458A137F61CC59E843 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -91,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				CA1F8759D6DEEC3993B2AC0C /* GeometryTests.swift */,
+				385668D4384DF4E8BA2C7191 /* SmoothingTests.swift */,
 				5B29733F9903EBB11F7D849C /* Fixtures */,
 			);
 			path = FormBuddyTests;
@@ -165,6 +170,7 @@
 			isa = PBXGroup;
 			children = (
 				C08E476B07A297854DBB5DC9 /* Geometry.swift */,
+				773858E3E4BF02C99DDF64C6 /* LandmarkSmoother.swift */,
 			);
 			path = AnalysisCore;
 			sourceTree = "<group>";
@@ -279,6 +285,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				83C7766E32EA2070E230440F /* GeometryTests.swift in Sources */,
+				8DA0EE5700AEAD15B61512B7 /* SmoothingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -289,6 +296,7 @@
 				FEB03A93A88E880B7D68A445 /* FormBuddyApp.swift in Sources */,
 				6C91305DED2CEACB988AB5CE /* Geometry.swift in Sources */,
 				ADF9D5691D543ADECF1764A9 /* GuidanceView.swift in Sources */,
+				8E6DA313DEA39D719FE3D433 /* LandmarkSmoother.swift in Sources */,
 				D7802EB062B0C5F377372A43 /* RepRecord.swift in Sources */,
 				9CFB5176744A5398ECA19BCC /* RootView.swift in Sources */,
 				7D68F023C655541472F6A932 /* Session.swift in Sources */,
