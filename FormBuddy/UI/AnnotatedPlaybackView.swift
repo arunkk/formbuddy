@@ -1,11 +1,13 @@
 import SwiftUI
 import AVFoundation
+import AVKit
 
 struct AnnotatedPlaybackView: View {
     let videoURL: URL
     let annotations: [FrameAnnotation]
     @State private var player: AVPlayer
     @State private var currentFrame: Int = 0
+    @State private var timeObserver: Any?
 
     init(videoURL: URL, annotations: [FrameAnnotation]) {
         self.videoURL = videoURL
@@ -29,11 +31,19 @@ struct AnnotatedPlaybackView: View {
                 .font(.caption)
             }
         }
-        .onReceive(player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.033, preferredTimescale: 600), queue: .main) { time in
-            let frame = Int(time.seconds * 30)
-            if frame < annotations.count {
-                currentFrame = frame
+        .onAppear {
+            let interval = CMTime(seconds: 0.033, preferredTimescale: 600)
+            timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+                let frame = Int(time.seconds * 30)
+                if frame < annotations.count {
+                    currentFrame = frame
+                }
             }
-        }) { _ in }
+        }
+        .onDisappear {
+            if let observer = timeObserver {
+                player.removeTimeObserver(observer)
+            }
+        }
     }
 }
