@@ -1,6 +1,5 @@
 import Foundation
 import CoreGraphics
-import AVFoundation
 
 struct OrientationMapper {
     let transform: CGAffineTransform
@@ -9,11 +8,6 @@ struct OrientationMapper {
     init(transform: CGAffineTransform, naturalSize: CGSize) {
         self.transform = transform
         self.naturalSize = naturalSize
-    }
-
-    init(track: AVAssetTrack) {
-        self.transform = track.preferredTransform
-        self.naturalSize = track.naturalSize
     }
 
     /// Size of the video after applying `preferredTransform` (i.e. as displayed).

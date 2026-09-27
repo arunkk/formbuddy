@@ -1,34 +1,19 @@
 import Foundation
 
-/// A read model that normalizes a freshly analyzed `SquatReport` and a
-/// persisted `Session` into one shape for `SessionDetailView`.
+/// A read model for `SessionDetailView`, built from a persisted `Session`.
+///
+/// It deliberately stays cheap: the per-frame annotation sidecar can be large,
+/// so it is loaded asynchronously by the view rather than decoded here on the
+/// main thread.
 struct SessionDetailModel {
     let exercise: String
     let createdAt: Date?
     let summary: SquatSummary
     let reps: [RepResult]
     let warnings: [String]
-    let sidecar: AnnotationSidecar?
+    let sessionID: UUID
     let videoURL: URL?
     let reportFileURL: URL?
-
-    var frames: [FrameAnnotation] { sidecar?.frameAnnotations ?? [] }
-    var fps: Double { sidecar?.fps ?? 30 }
-
-    /// Warnings that describe filming problems are surfaced separately from
-    /// per-rep faults so the detail screen can lead with them.
-    var filmingWarnings: [String] { warnings }
-
-    init(report: SquatReport, videoURL: URL?, sidecar: AnnotationSidecar?, reportFileURL: URL?) {
-        self.exercise = report.exercise
-        self.createdAt = nil
-        self.summary = report.summary
-        self.reps = report.reps
-        self.warnings = report.warnings
-        self.sidecar = sidecar
-        self.videoURL = videoURL
-        self.reportFileURL = reportFileURL
-    }
 
     init(session: Session) {
         self.exercise = session.exercise
@@ -36,7 +21,7 @@ struct SessionDetailModel {
         self.summary = SquatSummary(session.summary)
         self.reps = session.reps.sorted { $0.repNumber < $1.repNumber }.map(RepResult.init)
         self.warnings = session.warnings
-        self.sidecar = SessionStore.loadAnnotations(for: session.id)
+        self.sessionID = session.id
 
         let video = SessionStore.videoURL(for: session.id, filename: session.videoFilename)
         self.videoURL = session.videoFilename.isEmpty || !FileManager.default.fileExists(atPath: video.path)

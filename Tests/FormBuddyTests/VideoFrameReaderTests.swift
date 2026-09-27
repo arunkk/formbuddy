@@ -10,14 +10,19 @@ private final class AssetWriterReference: @unchecked Sendable {
 }
 
 final class VideoFrameReaderTests: XCTestCase {
-    func testRejectsFileWithoutVideoTrack() throws {
+    func testRejectsFileWithoutVideoTrack() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let url = directory.appendingPathComponent("not-a-movie.mov")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         try Data("not a movie".utf8).write(to: url)
 
-        XCTAssertThrowsError(try VideoFrameReader(url: url))
+        do {
+            _ = try await VideoFrameReader(url: url)
+            XCTFail("Expected VideoFrameReader to throw for a file without a video track")
+        } catch {
+            // Expected: no video track.
+        }
     }
 
     func testReadsEveryFrameWhenConsumerAcknowledgesSequentially() async throws {
@@ -27,7 +32,7 @@ final class VideoFrameReaderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         try await makeTestMovie(at: url, frameCount: 3)
 
-        let reader = try VideoFrameReader(url: url)
+        let reader = try await VideoFrameReader(url: url)
         var framesRead = 0
         for try await (pixelBuffer, _) in reader.frames() {
             XCTAssertEqual(CVPixelBufferGetWidth(pixelBuffer), 64)

@@ -39,14 +39,21 @@ final class VideoFrameReader {
     private static let logger = Logger(subsystem: "com.formbuddy.app", category: "video-decode")
     private let asset: AVURLAsset
     private let track: AVAssetTrack
+    private let nominalFrameRate: Double
+    private let duration: CMTime
+    private let transform: CGAffineTransform
     private let demand = FrameDemandGate()
 
-    init(url: URL) throws {
-        self.asset = AVURLAsset(url: url)
-        guard let track = asset.tracks(withMediaType: .video).first else {
+    init(url: URL) async throws {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw NSError(domain: "VideoFrameReader", code: 1, userInfo: [NSLocalizedDescriptionKey: "No video track found"])
         }
+        self.asset = asset
         self.track = track
+        self.nominalFrameRate = Double((try? await track.load(.nominalFrameRate)) ?? 0)
+        self.duration = (try? await track.load(.timeRange).duration) ?? .zero
+        self.transform = (try? await track.load(.preferredTransform)) ?? .identity
     }
 
     /// Yields at most one decoded pixel buffer at a time. The consumer must
@@ -125,16 +132,16 @@ final class VideoFrameReader {
     }
 
     var fps: Double {
-        track.nominalFrameRate > 0 ? Double(track.nominalFrameRate) : 30.0
+        nominalFrameRate > 0 ? Double(nominalFrameRate) : 30.0
     }
 
     var estimatedFrameCount: Int {
-        let seconds = CMTimeGetSeconds(track.timeRange.duration)
+        let seconds = CMTimeGetSeconds(duration)
         guard seconds.isFinite, seconds > 0 else { return 0 }
         return max(Int((seconds * fps).rounded()), 1)
     }
 
     var preferredTransform: CGAffineTransform {
-        track.preferredTransform
+        transform
     }
 }

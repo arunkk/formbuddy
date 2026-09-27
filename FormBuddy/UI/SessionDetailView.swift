@@ -10,30 +10,24 @@ struct SessionDetailView: View {
     private let model: SessionDetailModel
     private let session: Session?
     @State private var showDeleteConfirm = false
+    @State private var sidecar: AnnotationSidecar?
 
     init(session: Session) {
         self.model = SessionDetailModel(session: session)
         self.session = session
     }
 
-    init(report: SquatReport, videoURL: URL?, sidecar: AnnotationSidecar?, reportFileURL: URL?) {
-        self.model = SessionDetailModel(
-            report: report,
-            videoURL: videoURL,
-            sidecar: sidecar,
-            reportFileURL: reportFileURL
-        )
-        self.session = nil
-    }
+    private var frames: [FrameAnnotation] { sidecar?.frameAnnotations ?? [] }
+    private var fps: Double { sidecar?.fps ?? 30 }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if !model.filmingWarnings.isEmpty {
+                if !model.warnings.isEmpty {
                     warningsBanner
                 }
 
-                if let videoURL = model.videoURL, let sidecar = model.sidecar, !sidecar.frames.isEmpty {
+                if let videoURL = model.videoURL, let sidecar, !sidecar.frames.isEmpty {
                     SectionHeader(title: "Annotated playback", subtitle: "Skeleton and metrics drawn over your clip")
                     AnnotatedPlaybackView(videoURL: videoURL, sidecar: sidecar)
                 } else if model.videoURL == nil {
@@ -51,9 +45,9 @@ struct SessionDetailView: View {
                     noRepsNote
                 }
 
-                if !model.frames.isEmpty {
+                if !frames.isEmpty {
                     SectionHeader(title: "Knee angle", subtitle: "Rep boundaries marked in orange")
-                    KneeAngleChart(frames: model.frames, fps: model.fps)
+                    KneeAngleChart(frames: frames, fps: fps)
                         .padding(.vertical, 4)
                 }
 
@@ -64,6 +58,7 @@ struct SessionDetailView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle(model.exercise.capitalized)
         .navigationBarTitleDisplayMode(.inline)
+        .task { await loadSidecar() }
         .toolbar { toolbarContent }
         .confirmationDialog(
             "Delete this session?",
@@ -83,7 +78,7 @@ struct SessionDetailView: View {
             Label("Filming issue", systemImage: "exclamationmark.triangle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.orange)
-            ForEach(model.filmingWarnings, id: \.self) { warning in
+            ForEach(model.warnings, id: \.self) { warning in
                 Text(FormCopy.warning(warning))
                     .font(.subheadline)
                     .foregroundStyle(.primary)
@@ -147,7 +142,7 @@ struct SessionDetailView: View {
             if let createdAt = model.createdAt {
                 Text("Recorded \(createdAt.formatted(date: .abbreviated, time: .shortened))")
             }
-            Text("\(model.fps > 0 ? Int(model.fps.rounded()) : 30) fps · pose analysis on device")
+            Text("\(fps > 0 ? Int(fps.rounded()) : 30) fps · pose analysis on device")
         }
         .font(.footnote)
         .foregroundStyle(.tertiary)
@@ -176,6 +171,15 @@ struct SessionDetailView: View {
     }
 
     // MARK: - Actions
+
+    private func loadSidecar() async {
+        guard sidecar == nil else { return }
+        let id = model.sessionID
+        let loaded = await Task.detached(priority: .userInitiated) {
+            SessionStore.loadAnnotations(for: id)
+        }.value
+        sidecar = loaded
+    }
 
     private func deleteSession() {
         guard let session else { return }

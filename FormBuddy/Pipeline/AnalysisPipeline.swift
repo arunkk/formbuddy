@@ -68,7 +68,7 @@ final class AnalysisPipeline {
 
     func analyze(videoAt url: URL) async throws -> AnalysisResult {
         Self.logger.info("Starting video analysis: \(url.lastPathComponent, privacy: .public)")
-        let reader = try VideoFrameReader(url: url)
+        let reader = try await VideoFrameReader(url: url)
         let fps = reader.fps
         let estimatedFrames = reader.estimatedFrameCount
         Self.logger.info("Video reader ready: fps=\(fps), estimatedFrames=\(estimatedFrames)")

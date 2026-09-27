@@ -1,6 +1,6 @@
 import Foundation
 
-struct AnnotationFrame: Codable {
+struct AnnotationFrame: Codable, Sendable {
     let kneeAngle: Double?
     let torsoAngle: Double?
     let phase: String
@@ -21,7 +21,7 @@ struct AnnotationFrame: Codable {
     }
 }
 
-struct AnnotationSidecar: Codable {
+struct AnnotationSidecar: Codable, Sendable {
     let frames: [AnnotationFrame]
     let fps: Double
     let frameCount: Int

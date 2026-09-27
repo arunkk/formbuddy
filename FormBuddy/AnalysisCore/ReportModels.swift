@@ -1,6 +1,6 @@
 import Foundation
 
-struct FrameAnnotation {
+struct FrameAnnotation: Sendable {
     var kneeAngle: Double?
     var torsoAngle: Double?
     var phase: String
