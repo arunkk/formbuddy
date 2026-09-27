@@ -26,6 +26,7 @@ formbuddy --input squat.mp4 --no-video   # reports only, no annotated video
 | `--exercise` | `squat` | Exercise to analyze. Choices come from the analyzer registry in `src/formbuddy/pipeline.py`. |
 | `--output-dir` | `./out` | Where the reports and annotated video are written. |
 | `--no-video` | off | Skip the annotated MP4. |
+| `--no-segmentation` | off | Skip person segmentation and run pose on the raw frames. |
 
 On success the command prints a one-line summary and exits 0:
 
@@ -64,24 +65,36 @@ error (including an unsupported `--exercise`).
 
 ## How analysis works
 
-1. **Pose estimation.** Each frame is run through MediaPipe Pose
-   (`pose_landmarker_lite.task`), yielding 33 body landmarks.
-2. **Temporal smoothing.** Landmarks pass through a one-euro-style filter
+1. **Person segmentation.** Each frame is run through MediaPipe selfie
+   segmentation (`selfie_segmenter.tflite`).  The largest connected person
+   component — the best person in the scene — is kept and every other pixel
+   is suppressed to a flat grey, so the pose model never sees the rack,
+   plates or benches.  Pose results whose visible landmarks fall mostly
+   outside the silhouette are dropped as environment lock-on.
+   `report.json` records `segmented_frames` and
+   `pose_rejected_outside_person` under `video_meta`.
+2. **Pose estimation.** Each (person-only) frame is run through MediaPipe
+   Pose (`pose_landmarker_lite.task`), yielding 33 body landmarks.
+3. **Temporal smoothing.** Landmarks pass through a one-euro-style filter
    that removes jitter without adding perceptible lag.
-3. **Rep detection.** A hysteresis state machine on the knee angle
+4. **Rep detection.** A hysteresis state machine on the knee angle
    (hip–knee–ankle) segments the clip into reps: a rep starts as the
    lifter leaves standing, bottoms out, and returns to standing.
-4. **Form scoring.** Per rep, depth is classified from the bottom knee
+5. **Form scoring.** Per rep, depth is classified from the bottom knee
    angle (below / at / above parallel), and faults are recorded:
    `insufficient_depth`, `excessive_forward_lean` (torso angle from
    vertical at the bottom), and `uncontrolled_descent` (eccentric faster
    than 1 s).
-5. **Reporting.** Counts and per-rep details are written to `report.json`
+6. **Reporting.** Counts and per-rep details are written to `report.json`
    / `report.txt`, and the annotated video is rendered from the smoothed
    landmarks.
 
 ## Known limitations
 
+- **Segmentation is a gate, not a guarantee.** Frames where the selfie
+  model finds no person fall back to raw-frame pose estimation, and the
+  model can struggle with unusual framing (a very small or seated lifter).
+  If a clip segments poorly, rerun with `--no-segmentation`.
 - **Side view only.** The model reasons about a single 2D projection, so it
   cannot detect **knee valgus** (knees caving inward), **left/right
   asymmetries**, or **heel lift** — those need a front or rear view (or

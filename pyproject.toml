@@ -25,7 +25,7 @@ formbuddy = "formbuddy.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-formbuddy = ["assets/*.task"]
+formbuddy = ["assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

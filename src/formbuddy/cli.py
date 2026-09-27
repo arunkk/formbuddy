@@ -37,6 +37,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="write only the text/JSON reports, skip the annotated video",
     )
+    parser.add_argument(
+        "--no-segmentation",
+        action="store_true",
+        help="skip person segmentation and run pose on the raw frames",
+    )
     return parser
 
 
@@ -58,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
             exercise=args.exercise,
             output_dir=args.output_dir,
             write_video=not args.no_video,
+            segment_person=not args.no_segmentation,
         )
     except OSError as exc:
         # FileNotFoundError (unreadable input) and other OS errors such as
