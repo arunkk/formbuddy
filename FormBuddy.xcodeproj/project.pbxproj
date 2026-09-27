@@ -30,6 +30,7 @@
 		E772E067CE3CBC1ED282CA15 /* ReportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C048AD1A3A9529371DE5EB4 /* ReportModels.swift */; };
 		EB4C736D35D693FE18AF9B0C /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10C3C9880C623B8DA75FE993 /* SessionListView.swift */; };
 		EDB37F404EF6FB62A8310408 /* two_clean_reps.json in Resources */ = {isa = PBXBuildFile; fileRef = E349359ADFE1740E4CD9DAE0 /* two_clean_reps.json */; };
+		EE336C8606B5AC8CDB2753AB /* FixtureParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E020C163813A7C10BAB19AC /* FixtureParityTests.swift */; };
 		F542139B67116A4F26975553 /* partial_rep.json in Resources */ = {isa = PBXBuildFile; fileRef = 0FA1A2912F1DAADEC6269DBB /* partial_rep.json */; };
 		FEB03A93A88E880B7D68A445 /* FormBuddyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A629E8143913E0773EB1A8C5 /* FormBuddyApp.swift */; };
 /* End PBXBuildFile section */
@@ -54,6 +55,7 @@
 		513ABD595026C7EC7C0DE484 /* above_parallel_110.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = above_parallel_110.json; sourceTree = "<group>"; };
 		5435C127B0567844FF4C3E6E /* FormBuddyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FormBuddyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5C048AD1A3A9529371DE5EB4 /* ReportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportModels.swift; sourceTree = "<group>"; };
+		6E020C163813A7C10BAB19AC /* FixtureParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixtureParityTests.swift; sourceTree = "<group>"; };
 		773858E3E4BF02C99DDF64C6 /* LandmarkSmoother.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandmarkSmoother.swift; sourceTree = "<group>"; };
 		89E028E228EE100A53A0C5A2 /* SquatAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquatAnalyzerTests.swift; sourceTree = "<group>"; };
 		90A8860446357F8D3516E1B6 /* ExerciseAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseAnalyzer.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 		6C679CCA661B0A12055F71BD /* FormBuddyTests */ = {
 			isa = PBXGroup;
 			children = (
+				6E020C163813A7C10BAB19AC /* FixtureParityTests.swift */,
 				CA1F8759D6DEEC3993B2AC0C /* GeometryTests.swift */,
 				385668D4384DF4E8BA2C7191 /* SmoothingTests.swift */,
 				89E028E228EE100A53A0C5A2 /* SquatAnalyzerTests.swift */,
@@ -299,6 +302,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EE336C8606B5AC8CDB2753AB /* FixtureParityTests.swift in Sources */,
 				83C7766E32EA2070E230440F /* GeometryTests.swift in Sources */,
 				8DA0EE5700AEAD15B61512B7 /* SmoothingTests.swift in Sources */,
 				7DDFA55433DDC6B810A8E2C6 /* SquatAnalyzerTests.swift in Sources */,
