@@ -4,11 +4,17 @@ import AVFoundation
 /// The feedback player: the original clip with the pose skeleton and
 /// body-anchored fault highlights, optionally scoped to a single rep. Scoped
 /// playback loops the rep (unless Reduce Motion is on) so the user can study it.
+///
+/// The surface always fits the whole clip (never crops it) and zooms out when a
+/// tall portrait clip would otherwise push the controls off screen. Pinch and
+/// double-tap magnify for a closer look; changing rep resets back to fit.
 struct FeedbackPlayerView: View {
     let videoURL: URL
     let sidecar: AnnotationSidecar
     let segment: RepSegment?
     var rep: RepResult? = nil
+    /// Widest height the surface may occupy before it scales down to fit.
+    var maxVideoHeight: CGFloat = 460
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -27,6 +33,9 @@ struct FeedbackPlayerView: View {
     @State private var isScoped = false
     @State private var rangeStart: Double = 0
     @State private var rangeEnd: Double = 0
+
+    @State private var zoom: CGFloat = VideoFitGeometry.minZoom
+    @GestureState private var pinch: CGFloat = 1
 
     private var frames: [AnnotationFrame] { sidecar.frames }
     private var safeFPS: Double { sidecar.fps > 0 ? sidecar.fps : 30 }
@@ -51,6 +60,14 @@ struct FeedbackPlayerView: View {
         return 0...max(duration, 0.01)
     }
 
+    private var effectiveZoom: CGFloat {
+        VideoFitGeometry.effectiveZoom(base: zoom, pinch: pinch)
+    }
+
+    private var isMagnified: Bool {
+        VideoFitGeometry.isMagnified(zoom)
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             videoSurface
@@ -66,31 +83,67 @@ struct FeedbackPlayerView: View {
 
     private var videoSurface: some View {
         ZStack {
-            Color.black
-            PlayerLayerRepresentable(player: player)
+            // Video + overlay share one coordinate space so zooming magnifies
+            // both together and the skeleton stays registered to the body.
+            ZStack {
+                Color.black
+                PlayerLayerRepresentable(player: player)
 
-            if let annotation = currentAnnotation, let mapper {
-                FormHighlightsOverlay(frame: annotation, rep: rep, mapper: mapper, showHighlights: showHighlights)
+                if let annotation = currentAnnotation, let mapper {
+                    FormHighlightsOverlay(frame: annotation, rep: rep, mapper: mapper, showHighlights: showHighlights)
+                }
             }
+            .scaleEffect(effectiveZoom)
+            .clipped()
 
             hud
         }
         .aspectRatio(videoAspect, contentMode: .fit)
         .frame(maxWidth: .infinity)
+        .frame(maxHeight: maxVideoHeight)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .gesture(zoomGesture)
+        .onTapGesture(count: 2, perform: toggleZoom)
         .overlay(alignment: .topTrailing) {
-            Button {
-                showHighlights.toggle()
-            } label: {
-                Image(systemName: showHighlights ? "figure.walk.motion" : "figure.walk")
-                    .font(.body.weight(.semibold))
-                    .padding(8)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-            .frame(minWidth: 44, minHeight: 44)
-            .padding(6)
-            .accessibilityLabel(showHighlights ? "Hide form highlights" : "Show form highlights")
+            highlightsToggle
         }
+        .overlay(alignment: .bottomTrailing) {
+            if isMagnified {
+                fitButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isMagnified)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Annotated clip")
+        .accessibilityHint("Pinch or double-tap to zoom, then tap Fit to zoom out")
+    }
+
+    private var highlightsToggle: some View {
+        Button {
+            showHighlights.toggle()
+        } label: {
+            Image(systemName: showHighlights ? "figure.walk.motion" : "figure.walk")
+                .font(.body.weight(.semibold))
+                .padding(8)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .padding(6)
+        .accessibilityLabel(showHighlights ? "Hide form highlights" : "Show form highlights")
+    }
+
+    private var fitButton: some View {
+        Button(action: zoomOut) {
+            Image(systemName: "arrow.down.right.and.arrow.up.left")
+                .font(.body.weight(.semibold))
+                .padding(8)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .padding(6)
+        .accessibilityLabel("Fit the whole clip")
     }
 
     @ViewBuilder
@@ -129,6 +182,30 @@ struct FeedbackPlayerView: View {
             }
             .padding(10)
             .allowsHitTesting(false)
+        }
+    }
+
+    // MARK: - Zoom
+
+    private var zoomGesture: some Gesture {
+        MagnifyGesture(minimumScaleDelta: 0.01)
+            .updating($pinch) { value, state, _ in
+                state = value.magnification
+            }
+            .onEnded { value in
+                zoom = VideoFitGeometry.clampedZoom(zoom * value.magnification)
+            }
+    }
+
+    private func toggleZoom() {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            zoom = VideoFitGeometry.toggledZoom(zoom)
+        }
+    }
+
+    private func zoomOut() {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            zoom = VideoFitGeometry.minZoom
         }
     }
 
@@ -238,6 +315,8 @@ struct FeedbackPlayerView: View {
         isScoped = segment != nil
         rangeStart = start
         rangeEnd = max(end, start)
+        // A new rep is a new subject: snap back to fit so the whole body shows.
+        zoomOut()
         seek(to: start)
 
         if autoplay, segment != nil, !reduceMotion {

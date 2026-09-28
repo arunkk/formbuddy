@@ -181,7 +181,10 @@ struct FormHighlightsOverlay: View {
         let resolved = context.resolve(
             Text(text).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
         )
-        let textSize = resolved.measure(in: CGSize(width: size.width, height: .greatestFiniteMagnitude))
+        // Wrap inside the surface so a callout on a narrow portrait clip (or a
+        // magnified one) can't run off the edge and get clipped.
+        let maxTextWidth = max(size.width - 24, 48)
+        let textSize = resolved.measure(in: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude))
         let box = CGSize(width: textSize.width + 16, height: textSize.height + 10)
         var center = CGPoint(x: point.x + box.width / 2 + 14, y: point.y - box.height / 2 - 14)
         center.x = min(max(center.x, box.width / 2 + 4), max(size.width - box.width / 2 - 4, box.width / 2 + 4))

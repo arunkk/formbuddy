@@ -24,6 +24,9 @@ struct CaptureView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var errorMessage: String?
     @State private var showError = false
+    /// Aspect of the preview after the capture connection's (default portrait)
+    /// orientation is applied, so the framing guide can hug the real frame.
+    @State private var previewAspect: CGFloat = 720.0 / 1280.0
 
     enum CameraStatus: Equatable {
         case checking
@@ -36,7 +39,6 @@ struct CaptureView: View {
             ZStack {
                 previewBackground
                 if status == .ready {
-                    FramingGuide()
                     controls
                 } else if status == .unavailable {
                     unavailableState
@@ -88,11 +90,27 @@ struct CaptureView: View {
 
     @ViewBuilder
     private var previewBackground: some View {
-        if let layer = previewLayer {
-            CameraPreviewView(previewLayer: layer)
-                .ignoresSafeArea()
-        } else {
+        ZStack {
+            // Fill under the notch / home indicator; the preview itself stays
+            // inside the safe area so the framing guide never hides behind the
+            // navigation bar.
             Color.black.ignoresSafeArea()
+            if let layer = previewLayer {
+                GeometryReader { proxy in
+                    ZStack {
+                        CameraPreviewView(previewLayer: layer)
+                        if status == .ready {
+                            // The preview shows the whole recorded frame (it is
+                            // never cropped), so the guide tracks the real frame
+                            // the analyzer will see.
+                            let rect = VideoFitGeometry.fittedRect(aspect: previewAspect, available: proxy.size)
+                            FramingGuide()
+                                .frame(width: rect.width, height: rect.height)
+                                .position(x: rect.midX, y: rect.midY)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -116,7 +134,18 @@ struct CaptureView: View {
         session.sessionPreset = .hd1280x720
         if session.canAddInput(input) { session.addInput(input) }
         let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
+        // Show the entire recorded frame rather than a crop, so what you frame
+        // is exactly what gets analyzed.
+        layer.videoGravity = .resizeAspect
+
+        let dimensions = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+        if dimensions.width > 0, dimensions.height > 0 {
+            let width = CGFloat(dimensions.width)
+            let height = CGFloat(dimensions.height)
+            // The connection defaults to portrait, so a landscape sensor buffer
+            // is displayed rotated: the short side becomes the on-screen width.
+            previewAspect = width > height ? height / width : width / height
+        }
 
         captureSession = session
         previewLayer = layer

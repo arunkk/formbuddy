@@ -37,9 +37,21 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("FormBuddy v1.0")
-                    Text("On-device squat form analysis")
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Image("BrandMark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 40, height: 40)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("FormBuddy v1.0")
+                                .font(.body.weight(.semibold))
+                            Text("On-device squat form analysis")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
                 } header: {
                     Text("About")
                 }

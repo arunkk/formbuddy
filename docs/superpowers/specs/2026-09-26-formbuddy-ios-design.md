@@ -1,15 +1,22 @@
 # FormBuddy iOS — Mobile Port Design
 
+> **Status note:** this document is the original port design and is kept for
+> rationale. It was written while the analysis engine also existed as a Python
+> CLI; that implementation has since been removed and FormBuddy is now
+> mobile-only. References below to `src/formbuddy/*.py`, `pipeline.run`, the
+> CLI, and Python-generated parity fixtures describe the engine the Swift
+> `AnalysisCore` was ported from, not code that still lives in this repo. The
+> current layout and Android plan are in `README.md` and `AGENTS.md`.
+
 **Date:** 2026-09-26
 **Status:** Proposed design, pending review
-**Companion to:** `2026-09-26-formbuddy-squat-design.md` (the Python/CLI design)
 
 ## Overview
 
-FormBuddy iOS is an on-device port of the Python CLI: the user records (or
-imports) a side-view squat clip, the app estimates pose per frame with the same
-MediaPipe model the CLI ships, runs the same biomechanical rules, and presents a
-rep-by-rep report with annotated playback.
+FormBuddy iOS is the first native client of the FormBuddy analysis engine: the
+user records (or imports) a side-view squat clip, the app estimates pose per
+frame with the same MediaPipe model the engine bundles, runs the same
+biomechanical rules, and presents a rep-by-rep report with annotated playback.
 
 **Hard constraint: no cloud.** No account, no upload, no network calls of any
 kind. The model bundle ships inside the app; all video, landmarks, and reports
@@ -24,10 +31,9 @@ a byte-compatible `report.json` schema (see "Parity strategy").
 
 ### Goals
 
-1. Numerical parity with the Python analyzer, provable by test.
-2. A streaming pipeline that fits in phone memory (the CLI's does not).
-3. Analysis-core code that is pure and unit-testable with no ML runtime — the
-   same property `geometry.py` already has.
+1. Numerical parity with the reference squat analyzer, provable by test.
+2. A streaming pipeline that fits in phone memory.
+3. Analysis-core code that is pure and unit-testable with no ML runtime.
 4. An architecture where "live coaching" (v2) is a small step, not a rewrite.
 
 ### Non-goals (v1)
@@ -35,11 +41,11 @@ a byte-compatible `report.json` schema (see "Parity strategy").
 - Live/real-time camera feedback. Designed for, not built.
 - Annotated-MP4 export (baking the overlay into a new video file). The overlay
   is rendered at playback time instead. Optional later milestone.
-- New exercises. Squat only, mirroring `ANALYZERS = {"squat": SquatAnalyzer}`.
+- New exercises. Squat only.
 - Front-view faults: knee valgus, left/right asymmetry, heel lift. Same
-  limitation as the Python side-view analyzer — surfaced in UI copy, not
+  limitation as the reference side-view analyzer — surfaced in UI copy, not
   silently dropped.
-- Multi-person. `numPoses = 1`, as in `pose.py`.
+- Multi-person. `numPoses = 1`.
 - Any cloud service, sync, or analytics.
 
 ## Technology decisions

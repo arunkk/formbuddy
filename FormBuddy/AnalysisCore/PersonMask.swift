@@ -3,7 +3,7 @@ import CoreVideo
 
 /// Binary silhouette of the best person in one frame.
 ///
-/// Ports ``src/formbuddy/segment.py``: MediaPipe Pose can lock onto gym
+/// MediaPipe Pose can lock onto gym
 /// equipment (rack uprights, plates, benches) when the lifter shares the frame
 /// with it, so the pose landmarker is only ever shown person pixels and pose
 /// results are validated against the silhouette.

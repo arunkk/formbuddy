@@ -69,8 +69,14 @@ struct CoachCardView: View {
 
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Form card")
-                .font(.largeTitle.weight(.bold))
+            HStack(spacing: 12) {
+                Image("BrandMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 34, height: 34)
+                Text("Form card")
+                    .font(.largeTitle.weight(.bold))
+            }
             HStack(spacing: 8) {
                 Text(header.exercise.capitalized)
                     .font(.subheadline.weight(.semibold))

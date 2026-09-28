@@ -34,7 +34,15 @@ struct SessionListView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("No sets yet", systemImage: "figure.strengthtraining.traditional")
+            Label {
+                Text("No sets yet")
+            } icon: {
+                Image("BrandMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 56, height: 56)
+                    .accessibilityHidden(true)
+            }
         } description: {
             Text("Record a squat set or import a clip to get rep-by-rep form feedback — all on device.")
         } actions: {

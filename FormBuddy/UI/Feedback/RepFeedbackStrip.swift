@@ -56,7 +56,7 @@ struct RepFeedbackStrip: View {
                     if let image = thumbnails[item.repNumber] {
                         Image(uiImage: image)
                             .resizable()
-                            .scaledToFill()
+                            .scaledToFit()
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     } else {
                         Image(systemName: "figure.strengthtraining.traditional")

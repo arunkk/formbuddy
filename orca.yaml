@@ -1,6 +1,4 @@
 # orca.yaml
 worktree:
   sharedDirectories:
-    - .venv
     - testdata
-

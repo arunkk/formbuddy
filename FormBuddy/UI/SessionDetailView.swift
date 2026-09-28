@@ -20,6 +20,9 @@ struct SessionDetailView: View {
     @State private var cardImage: UIImage?
     @State private var isBuildingArtifacts = false
     @State private var didBuildArtifacts = false
+    /// Measured height of the scroll viewport, used to cap the player so a tall
+    /// portrait clip zooms out to fit instead of pushing the controls off screen.
+    @State private var viewportHeight: CGFloat = 0
 
     init(session: Session) {
         self.model = SessionDetailModel(session: session)
@@ -76,6 +79,13 @@ struct SessionDetailView: View {
             .padding()
         }
         .background(Color(.systemGroupedBackground))
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { viewportHeight = proxy.size.height }
+                    .onChange(of: proxy.size.height) { _, newValue in viewportHeight = newValue }
+            }
+        }
         .navigationTitle("Feedback")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadSidecar() }
@@ -105,7 +115,8 @@ struct SessionDetailView: View {
                 videoURL: videoURL,
                 sidecar: sidecar,
                 segment: selectedFeedback?.segment,
-                rep: selectedFeedback?.result
+                rep: selectedFeedback?.result,
+                maxVideoHeight: VideoFitGeometry.maximumHeight(viewport: viewportHeight)
             )
             if !feedback.isEmpty {
                 RepFeedbackStrip(feedback: feedback, thumbnails: thumbnails, selectedRep: $selectedRep)

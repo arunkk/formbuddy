@@ -6,7 +6,7 @@ import CoreVideo
 /// segmentation model (bundled `selfie_segmenter.tflite`).
 ///
 /// Runs in `.video` mode so the person mask is tracked temporally, mirroring
-/// the pose estimator and the Python `formbuddy.segment.PersonSegmenter`. This
+/// the pose estimator. This
 /// is the only file that imports the segmentation model; the mask maths lives
 /// in `PersonMaskBuilder` so it stays testable without the ML runtime.
 final class PersonSegmenter {
