@@ -29,6 +29,26 @@ make ios-run       # build, install, launch on the booted simulator
 Single Swift test: append `-only-testing:FormBuddyTests/SquatAnalyzerTests` to
 the `ios-test` command. Override the simulator with `make ios-test SIMULATOR="iPhone 17"`.
 
+### Running on a physical device
+
+`project.yml` ships `DEVELOPMENT_TEAM: ""`, so a device build fails signing
+until the team is supplied. Use the FormBuddy team **`MQN89Y5EKV`** and let
+Xcode update provisioning:
+
+```bash
+xcodebuild -workspace FormBuddy.xcworkspace -scheme FormBuddy -sdk iphoneos \
+  -destination 'id=<device-udid>' -configuration Debug \
+  DEVELOPMENT_TEAM=MQN89Y5EKV -allowProvisioningUpdates build
+xcrun devicectl device install app --device <device-udid> \
+  "$(xcodebuild -workspace FormBuddy.xcworkspace -scheme FormBuddy -sdk iphoneos \
+     -configuration Debug -showBuildSettings \
+     | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$2} / FULL_PRODUCT_NAME /{n=$2} END{print d "/" n}')"
+```
+
+There is already an `iOS Team Provisioning Profile: com.formbuddy.app` for this
+team, so the bundle identifier `com.formbuddy.app` is registered and no manual
+profile work is needed. List attached devices with `xcrun devicectl list devices`.
+
 ## Gotchas (verify these before trusting tooling)
 
 - **Never open or build `FormBuddy.xcodeproj`.** MediaPipeTasksVision comes from
